@@ -4,12 +4,44 @@
   const panels = document.querySelectorAll('.cg-tab-panel');
   const loaded = {};
 
+  const statusSelect = document.getElementById('cgCaseStatusSelect');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', async function () {
+      const newStatus = this.value;
+      const res = await cgApi('/api/cases/update.php', {
+        method: 'POST',
+        body: JSON.stringify({ id: caseId, status: newStatus })
+      });
+      if (res.success) {
+        cgToast(res.message || 'Case status updated.', 'success');
+        const badge = document.querySelector('.cg-badge-status');
+        if (badge) {
+          badge.textContent = newStatus;
+          badge.className = `cg-badge-status status-${newStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+        }
+      } else {
+        cgToast(res.message || 'Failed to update case status.', 'error');
+      }
+    });
+  }
+
   function activateTab(name) {
+    if (!name) return;
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     panels.forEach(p => p.hidden = p.id !== `tab-${name}`);
-    if (!loaded[name]) { loaded[name] = true; loadTab(name); }
-    if (name === 'network' && window.cgGraphInstance) setTimeout(() => window.cgGraphInstance.fit(), 50);
+    if (!loaded[name]) {
+      loaded[name] = true;
+      try { loadTab(name); } catch (e) { console.error('Tab load error:', e); }
+    }
+    if (name === 'network' && window.cgGraphInstance) {
+      setTimeout(() => { try { window.cgGraphInstance.fit(); } catch (e) {} }, 50);
+    }
   }
+
+  document.getElementById('cgTabs')?.addEventListener('click', (e) => {
+    const tabEl = e.target.closest('.cg-tab');
+    if (tabEl && tabEl.dataset.tab) activateTab(tabEl.dataset.tab);
+  });
   tabs.forEach(t => t.addEventListener('click', () => activateTab(t.dataset.tab)));
 
   function loadTab(name) {
@@ -19,7 +51,14 @@
       analysis: loadAnalysis, notes: loadNotes, activity: loadActivity,
       reports: loadReports
     };
-    if (fns[name]) fns[name]();
+    if (fns[name]) {
+      try {
+        const res = fns[name]();
+        if (res && typeof res.catch === 'function') res.catch(err => console.error(`Error loading tab ${name}:`, err));
+      } catch (err) {
+        console.error(`Error loading tab ${name}:`, err);
+      }
+    }
   }
 
   // ---------- Overview ----------
