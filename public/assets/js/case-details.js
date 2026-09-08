@@ -142,7 +142,40 @@
   }
 
   // ---------- Network Graph (vis-network) ----------
-  let network, allNodes, allEdges, entityMeta = {};
+  let network, allNodes, allEdges, entityMeta = {}, isPhysicsEnabled = true;
+
+  const TYPE_COLOR_MAP = {
+    'Person': '#38bdf8',
+    'Organization': '#a78bfa',
+    'Location': '#34d399',
+    'Vehicle': '#fbbf24',
+    'Phone Number': '#f472b6',
+    'Bank Account': '#f87171',
+    'Transaction': '#fb923c',
+    'Event': '#c084fc',
+    'Social Media Account': '#60a5fa',
+    'Document': '#94a3b8',
+    'Photo / Image': '#38bdf8',
+    'Video Footage': '#e879f9',
+    'Face / Suspect Tag': '#ef4444',
+    'License Plate OCR': '#f59e0b',
+    'GPS Location Tag': '#10b981',
+    'Evidence Object': '#6366f1'
+  };
+
+  const REL_COLOR_MAP = {
+    'CALLS': '#f472b6',
+    'TRANSFERRED_MONEY_TO': '#fb923c',
+    'SPOTTED_AT': '#10b981',
+    'VISITED': '#34d399',
+    'FEATURED_IN_FRAME': '#e879f9',
+    'OWNS': '#fbbf24',
+    'WORKS_FOR': '#a78bfa',
+    'ASSOCIATED_WITH': '#0284c7',
+    'FAMILY_OF': '#38bdf8',
+    'MET_WITH': '#60a5fa'
+  };
+
   async function loadGraph() {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js');
     const [entitiesRes, relsRes] = await Promise.all([
@@ -151,55 +184,103 @@
     ]);
     if (!entitiesRes.success || !relsRes.success) return;
 
-    const entities = entitiesRes.data.items;
-    const rels = relsRes.data.items;
+    const entities = entitiesRes.data.items || [];
+    const rels = relsRes.data.items || [];
     entityMeta = {};
     entities.forEach(e => entityMeta[e.id] = e);
 
     const typeFilter = document.getElementById('cgGraphTypeFilter');
-    if (!typeFilter.dataset.loaded) {
+    if (typeFilter && !typeFilter.dataset.loaded) {
       const types = [...new Set(entities.map(e => e.type_name))];
-      typeFilter.innerHTML = '<option value="">All Types</option>' + types.map(t => `<option>${t}</option>`).join('');
+      typeFilter.innerHTML = '<option value="">All Entity Types</option>' + types.map(t => `<option value="${t}">${t}</option>`).join('');
       typeFilter.dataset.loaded = '1';
     }
 
-    allNodes = new vis.DataSet(entities.map(e => ({
-      id: e.id,
-      label: e.name,
-      title: `${e.type_name} · Risk ${e.risk_score}% · ${e.connections} connections`,
-      color: { background: e.color || '#0284c7', border: '#0369a1', highlight: { background: '#0369a1', border: '#0284c7' } },
-      font: { color: '#0f172a', size: 13, face: 'Inter', strokeWidth: 3, strokeColor: '#ffffff' },
-      shape: 'dot',
-      size: 16 + Math.min(24, e.connections * 2),
-      group: e.type_name,
-    })));
-
-    allEdges = new vis.DataSet(rels.map(r => ({
-      id: r.id, from: r.source_entity_id, to: r.target_entity_id,
-      label: r.rel_type.replace(/_/g, ' '), font: { color: '#0284c7', size: 10, face: 'Inter', strokeWidth: 2, strokeColor: '#ffffff' },
-      color: { color: '#94a3b8', highlight: '#0284c7', hover: '#0284c7' }, arrows: 'to', width: Math.min(4, 1 + r.strength / 5),
-    })));
-
     if (entities.length === 0) {
-      document.getElementById('cgNetworkGraph').innerHTML = '<div class="cg-empty-state pt-5"><i class="fa-solid fa-circle-nodes"></i>No entities yet — process a document to build the network.</div>';
+      document.getElementById('cgNetworkGraph').innerHTML = '<div class="cg-empty-state pt-5"><i class="fa-solid fa-circle-nodes"></i>No entities yet — upload and process a document to build the network.</div>';
       return;
     }
 
+    allNodes = new vis.DataSet(entities.map(e => {
+      const mainColor = TYPE_COLOR_MAP[e.type_name] || e.color || '#0284c7';
+      const isHighRisk = e.risk_score >= 70;
+      const borderColor = isHighRisk ? '#dc2626' : (e.risk_score >= 40 ? '#d97706' : '#0284c7');
+      const borderWidth = isHighRisk ? 4 : 2;
+
+      return {
+        id: e.id,
+        label: `${e.name}\n[${e.type_name}]`,
+        title: `<strong>${e.name}</strong><br>Type: ${e.type_name}<br>Risk Score: <strong>${e.risk_score}%</strong><br>Connections: ${e.connections}`,
+        color: {
+          background: mainColor,
+          border: borderColor,
+          highlight: { background: '#0284c7', border: '#0369a1' },
+          hover: { background: mainColor, border: '#0f172a' }
+        },
+        borderWidth: borderWidth,
+        borderWidthSelected: 5,
+        font: {
+          color: '#0f172a',
+          size: 12,
+          face: 'Inter',
+          strokeWidth: 4,
+          strokeColor: '#ffffff'
+        },
+        shape: isHighRisk ? 'diamond' : 'dot',
+        size: 18 + Math.min(26, e.connections * 3),
+        group: e.type_name,
+      };
+    }));
+
+    allEdges = new vis.DataSet(rels.map(r => {
+      const relType = r.rel_type || 'ASSOCIATED_WITH';
+      const edgeColor = REL_COLOR_MAP[relType] || '#0284c7';
+      const isDashed = ['CALLS', 'MENTIONED_IN'].includes(relType);
+
+      return {
+        id: r.id,
+        from: r.source_entity_id,
+        to: r.target_entity_id,
+        label: relType.replace(/_/g, ' '),
+        font: {
+          color: '#0369a1',
+          size: 11,
+          face: 'Inter',
+          strokeWidth: 3,
+          strokeColor: '#ffffff',
+          align: 'horizontal'
+        },
+        color: {
+          color: edgeColor,
+          highlight: '#0f172a',
+          hover: '#0284c7'
+        },
+        arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+        dashes: isDashed,
+        width: Math.min(6, 2 + (r.strength || 1) / 3),
+        smooth: { type: 'continuous', roundness: 0.2 }
+      };
+    }));
+
     const container = document.getElementById('cgNetworkGraph');
-    network = new vis.Network(container, { nodes: allNodes, edges: allEdges }, {
+    const options = {
+      nodes: { shadow: true },
+      edges: { shadow: false },
       physics: {
         solver: 'barnesHut',
         barnesHut: {
-          gravitationalConstant: -12000,
-          centralGravity: 0.1,
-          springLength: 160,
+          gravitationalConstant: -14000,
+          centralGravity: 0.12,
+          springLength: 170,
           springConstant: 0.04,
-          avoidOverlap: 0.8
+          avoidOverlap: 0.85
         },
-        stabilization: { iterations: 150 }
+        stabilization: { iterations: 180 }
       },
-      interaction: { hover: true, tooltipDelay: 100 },
-    });
+      interaction: { hover: true, tooltipDelay: 80, zoomView: true, dragView: true }
+    };
+
+    network = new vis.Network(container, { nodes: allNodes, edges: allEdges }, options);
     window.cgGraphInstance = network;
 
     network.on('click', (params) => {
@@ -209,6 +290,40 @@
       } else {
         panel.classList.remove('show');
       }
+    });
+
+    renderGraphLegend(entities);
+  }
+
+  function renderGraphLegend(entities) {
+    const legendEl = document.getElementById('cgGraphLegend');
+    if (!legendEl) return;
+    const presentTypes = [...new Set(entities.map(e => e.type_name))];
+
+    legendEl.innerHTML = `
+      <div class="fw-700 text-dark mb-1" style="font-size:11.5px">
+        <i class="fa-solid fa-layer-group text-primary me-1"></i> Legend (Click to filter)
+      </div>
+      <div class="d-flex flex-wrap gap-1">
+        ${presentTypes.map(t => {
+          const color = TYPE_COLOR_MAP[t] || '#0284c7';
+          return `<span class="cg-legend-pill" data-type="${t}" style="background:${color}20; border-color:${color}">
+            <span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block"></span>
+            <span>${t}</span>
+          </span>`;
+        }).join('')}
+      </div>
+    `;
+
+    legendEl.querySelectorAll('.cg-legend-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const type = pill.dataset.type;
+        const typeFilter = document.getElementById('cgGraphTypeFilter');
+        if (typeFilter) {
+          typeFilter.value = type;
+          typeFilter.dispatchEvent(new Event('change'));
+        }
+      });
     });
   }
 
@@ -221,36 +336,112 @@
     panel.classList.add('show');
     panel.innerHTML = `
       <div class="d-flex justify-content-between align-items-start mb-2">
-        <div><div class="text-muted small">ENTITY</div><div class="fw-800 text-dark fs-6">${e.name}</div></div>
+        <div><div class="text-muted small">ENTITY INSPECTOR</div><div class="fw-800 text-dark fs-6">${e.name}</div></div>
         <button class="btn-close" onclick="document.getElementById('cgGraphSidePanel').classList.remove('show')"></button>
       </div>
       <div class="small text-muted mb-1">Type: <span class="fw-700 text-dark">${e.type_name}</span></div>
-      <div class="small text-muted mb-1">Risk Score: <span class="fw-700 text-dark">${e.risk_score}%</span></div>
+      <div class="small text-muted mb-1">Risk Score: <span class="fw-800 ${e.risk_score >= 70 ? 'text-danger' : e.risk_score >= 40 ? 'text-warning' : 'text-success'}">${e.risk_score}%</span></div>
       <div class="small text-muted mb-3">Connections: <span class="fw-700 text-dark">${rels.length}</span></div>
-      <div class="fw-700 text-dark small mb-2">Relationships</div>
+      <div class="fw-700 text-dark small mb-2 border-bottom pb-1">Network Connections</div>
       ${rels.map(r => `<div class="small py-1 border-bottom" style="border-color:var(--cg-border-soft)!important">
-          <span class="fw-600 text-dark">${r.other_name}</span><br><span class="text-muted small">${r.rel_type.replace(/_/g, ' ')}</span>
+          <span class="fw-600 text-dark">${r.other_name}</span><br><span class="text-primary small fw-600">${r.rel_type.replace(/_/g, ' ')}</span>
         </div>`).join('') || '<div class="small text-muted">No relationships recorded.</div>'}
     `;
   }
 
   document.getElementById('cgGraphSearch')?.addEventListener('input', function () {
     if (!network || !allNodes) return;
-    const q = this.value.toLowerCase();
+    const q = this.value.toLowerCase().trim();
+    if (!q) { network.unselectAll(); return; }
     const match = allNodes.get().find(n => n.label.toLowerCase().includes(q));
-    if (match && q.length > 1) { network.selectNodes([match.id]); network.focus(match.id, { scale: 1.2, animation: true }); showEntityPanel(match.id); }
+    if (match) {
+      network.selectNodes([match.id]);
+      network.focus(match.id, { scale: 1.3, animation: true });
+      showEntityPanel(match.id);
+    }
   });
+
   document.getElementById('cgGraphTypeFilter')?.addEventListener('change', function () {
     if (!allNodes) return;
     const val = this.value;
     allNodes.forEach(n => {
-      allNodes.update({ id: n.id, hidden: val ? entityMeta[n.id].type_name !== val : false });
+      const meta = entityMeta[n.id];
+      allNodes.update({ id: n.id, hidden: val ? (meta && meta.type_name !== val) : false });
     });
   });
-  document.getElementById('cgGraphReset')?.addEventListener('click', () => network && network.fit());
-  document.getElementById('cgGraphFullscreen')?.addEventListener('click', () => {
-    const el = document.getElementById('cgGraphWrap');
-    if (el.requestFullscreen) el.requestFullscreen();
+
+  document.getElementById('cgGraphLayoutSelect')?.addEventListener('change', function () {
+    if (!network) return;
+    const layout = this.value;
+    if (layout === 'hierarchical') {
+      network.setOptions({
+        layout: { hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', nodeSpacing: 150 } },
+        physics: false
+      });
+    } else {
+      network.setOptions({
+        layout: { hierarchical: { enabled: false } },
+        physics: { solver: 'barnesHut', barnesHut: { gravitationalConstant: -14000, centralGravity: 0.12, springLength: 170 } }
+      });
+    }
+  });
+
+  document.getElementById('cgGraphZoomIn')?.addEventListener('click', () => {
+    if (network) network.moveTo({ scale: network.getScale() * 1.25, animation: true });
+  });
+
+  document.getElementById('cgGraphZoomOut')?.addEventListener('click', () => {
+    if (network) network.moveTo({ scale: network.getScale() * 0.8, animation: true });
+  });
+
+  document.getElementById('cgGraphReset')?.addEventListener('click', () => {
+    if (network) network.fit({ animation: true });
+  });
+
+  document.getElementById('cgGraphPhysicsToggle')?.addEventListener('click', function () {
+    if (!network) return;
+    isPhysicsEnabled = !isPhysicsEnabled;
+    network.setOptions({ physics: { enabled: isPhysicsEnabled } });
+    this.innerHTML = isPhysicsEnabled ? '<i class="fa-solid fa-pause me-1"></i> Freeze' : '<i class="fa-solid fa-play me-1"></i> Resume';
+    cgToast(isPhysicsEnabled ? 'Graph physics enabled.' : 'Graph layout frozen.', 'info');
+  });
+
+  function toggleGraphFullscreen() {
+    const wrap = document.getElementById('cgGraphWrap');
+    const exitBtn = document.getElementById('cgExitFullscreenBtn');
+    if (!wrap) return;
+
+    if (!document.fullscreenElement && !document.webkitFullscreenElement && !wrap.classList.contains('cg-fullscreen-active')) {
+      if (wrap.requestFullscreen) {
+        wrap.requestFullscreen();
+      } else if (wrap.webkitRequestFullscreen) {
+        wrap.webkitRequestFullscreen();
+      } else {
+        wrap.classList.add('cg-fullscreen-active');
+      }
+      if (exitBtn) exitBtn.classList.remove('d-none');
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else {
+        wrap.classList.remove('cg-fullscreen-active');
+      }
+      if (exitBtn) exitBtn.classList.add('d-none');
+    }
+    setTimeout(() => { if (network) network.fit(); }, 200);
+  }
+
+  document.getElementById('cgGraphFullscreen')?.addEventListener('click', toggleGraphFullscreen);
+  document.getElementById('cgExitFullscreenBtn')?.addEventListener('click', toggleGraphFullscreen);
+
+  document.addEventListener('fullscreenchange', () => {
+    const exitBtn = document.getElementById('cgExitFullscreenBtn');
+    if (!document.fullscreenElement && exitBtn) {
+      exitBtn.classList.add('d-none');
+    }
+    setTimeout(() => { if (network) network.fit(); }, 200);
   });
 
   // ---------- Entities tab ----------

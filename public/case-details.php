@@ -81,14 +81,35 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
 </div>
 
 <div id="tab-network" class="cg-tab-panel" hidden>
-  <div class="cg-graph-toolbar">
-    <input type="text" id="cgGraphSearch" class="cg-form-control cg-btn-sm" style="width:180px" placeholder="Search node...">
-    <select id="cgGraphTypeFilter" class="cg-form-select cg-btn-sm" style="width:160px"><option value="">All Types</option></select>
-    <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphReset"><i class="fa-solid fa-arrows-rotate"></i></button>
-    <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphFullscreen"><i class="fa-solid fa-expand"></i></button>
+  <div class="cg-card mb-3 p-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="cg-search position-relative" style="width:220px">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="cgGraphSearch" placeholder="Search node name...">
+        </div>
+        <select id="cgGraphTypeFilter" class="cg-form-select cg-btn-sm" style="width:170px"><option value="">All Entity Types</option></select>
+        <select id="cgGraphLayoutSelect" class="cg-form-select cg-btn-sm" style="width:180px">
+          <option value="force">Force Directed (Default)</option>
+          <option value="hierarchical">Hierarchical Tree</option>
+        </select>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphZoomIn" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+        <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphZoomOut" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+        <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphReset" title="Fit Entire Network"><i class="fa-solid fa-compress-arrows-alt"></i> Fit View</button>
+        <button class="cg-btn cg-btn-outline cg-btn-sm" id="cgGraphPhysicsToggle" title="Toggle Stabilization"><i class="fa-solid fa-pause me-1"></i> Freeze</button>
+        <button class="cg-btn cg-btn-primary cg-btn-sm" id="cgGraphFullscreen"><i class="fa-solid fa-expand me-1"></i> Fullscreen</button>
+      </div>
+    </div>
   </div>
-  <div class="cg-graph-wrap" style="height:560px" id="cgGraphWrap">
+
+  <div class="cg-graph-wrap" style="height:620px; position:relative;" id="cgGraphWrap">
+    <button class="cg-btn cg-btn-outline cg-btn-sm bg-white text-dark position-absolute top-0 end-0 m-3 z-3 shadow-sm d-none" id="cgExitFullscreenBtn">
+      <i class="fa-solid fa-compress me-1 text-danger"></i> Exit Fullscreen
+    </button>
     <div id="cgNetworkGraph" style="height:100%"></div>
+    <div class="cg-graph-legend" id="cgGraphLegend"></div>
     <div class="cg-graph-panel" id="cgGraphSidePanel"></div>
   </div>
 </div>
