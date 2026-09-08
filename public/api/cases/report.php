@@ -3,7 +3,7 @@
  * CYVANTA - Full 12-Section Case Intelligence Report API Endpoint
  */
 
-require_once __DIR__ . '/../../includes/bootstrap.php';
+require_once dirname(__DIR__, 3) . '/includes/bootstrap.php';
 cg_require_login();
 
 header('Content-Type: application/json');
@@ -79,7 +79,7 @@ try {
     $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // 6. Fetch Documents & Evidence Inventory
-    $stmt = $pdo->prepare('SELECT id, name, original_filename, confidentiality, status, created_at FROM documents WHERE case_id = ?');
+    $stmt = $pdo->prepare('SELECT id, name, original_filename, confidentiality, status, uploaded_at AS created_at FROM documents WHERE case_id = ?');
     $stmt->execute([$caseId]);
     $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -89,7 +89,7 @@ try {
 
     // 7. Fetch Analysis Patterns
     $stmt = $pdo->prepare('
-        SELECT ar.*, a.created_at AS analysis_time
+        SELECT ar.*, a.completed_at AS analysis_time
         FROM analysis_results ar
         JOIN ai_analyses a ON a.id = ar.analysis_id
         WHERE a.case_id = ?
