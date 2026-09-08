@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS cases (
     priority TEXT NOT NULL DEFAULT 'Medium',
     status TEXT NOT NULL DEFAULT 'New',
     tags TEXT DEFAULT NULL,
+    agency_reference TEXT DEFAULT NULL,
+    is_unsolved INTEGER NOT NULL DEFAULT 1,
+    osint_keywords TEXT DEFAULT NULL,
     created_by INTEGER DEFAULT NULL,
     lead_investigator_id INTEGER DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -242,4 +245,30 @@ CREATE TABLE IF NOT EXISTS system_settings (
     setting_key TEXT PRIMARY KEY,
     setting_value TEXT DEFAULT NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS osint_feeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER DEFAULT NULL,
+    source_name TEXT NOT NULL,
+    feed_url TEXT DEFAULT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    url TEXT DEFAULT NULL,
+    published_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cross_case_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_case_id INTEGER NOT NULL,
+    target_case_id INTEGER NOT NULL,
+    entity_name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    confidence_score INTEGER NOT NULL DEFAULT 85,
+    match_details TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (source_case_id) REFERENCES cases(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_case_id) REFERENCES cases(id) ON DELETE CASCADE
 );

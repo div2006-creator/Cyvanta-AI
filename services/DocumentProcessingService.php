@@ -328,7 +328,10 @@ class DocumentProcessingService
             'bengaluru police', 'bengaluru police and who', 'the', 'this', 'that', 'with', 'from',
             'primary region', 'tamil nadu case', 'legal note', 'official source', 'case nature',
             'case summary', 'network structure', 'legal proceedings', 'case timeline',
-            'key types', 'important legal', 'nia cases', 'following investigation', 'subsequent years'
+            'key types', 'important legal', 'nia cases', 'following investigation', 'subsequent years',
+            'original filename', 'file type', 'file size', 'uploaded description', 'visual feature annotations',
+            'detected photo entity', 'detected video entity', 'media intelligence analysis', 'evidence source',
+            'surveillance source', 'exif timestamp', 'camera device', 'image resolution', 'keyframe timeline'
         ];
 
         $isStop = function(string $term) use ($stopWords): bool {

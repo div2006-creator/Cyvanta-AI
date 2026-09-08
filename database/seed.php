@@ -93,42 +93,61 @@ function upsertCase(PDO $pdo, array $c): int
     $stmt->execute([$c['case_number']]);
     if ($existing = $stmt->fetch()) return (int) $existing['id'];
     $stmt = $pdo->prepare(
-        'INSERT INTO cases (case_number, title, description, category, location, incident_date, priority, status, tags, created_by, lead_investigator_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+        'INSERT INTO cases (case_number, title, description, category, location, incident_date, priority, status, tags, agency_reference, is_unsolved, osint_keywords, created_by, lead_investigator_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
     );
     $stmt->execute([
         $c['case_number'], $c['title'], $c['description'], $c['category'], $c['location'], $c['incident_date'],
-        $c['priority'], $c['status'], $c['tags'], $c['created_by'], $c['lead_investigator_id'],
+        $c['priority'], $c['status'], $c['tags'], $c['agency_reference'] ?? null, $c['is_unsolved'] ?? 1, $c['osint_keywords'] ?? null, $c['created_by'], $c['lead_investigator_id'],
     ]);
     return (int) $pdo->lastInsertId();
 }
 
 $case1 = upsertCase($pdo, [
     'case_number' => 'CASE-2026-001', 'title' => 'Operation Nexus',
-    'description' => 'Fictional demo case investigating a suspected smuggling network operating across three districts.',
+    'description' => 'Active unsolved investigation into a suspected organized smuggling network operating across three districts.',
     'category' => 'Organized Crime', 'location' => 'Mumbai, Maharashtra', 'incident_date' => '2026-07-02',
-    'priority' => 'Critical', 'status' => 'Under Investigation', 'tags' => 'smuggling,network,demo',
+    'priority' => 'Critical', 'status' => 'Under Investigation', 'tags' => 'smuggling,network,unsolved',
+    'agency_reference' => 'FIR-MUM-2026-1049', 'is_unsolved' => 1, 'osint_keywords' => 'smuggling,andheri,nexus',
     'created_by' => $adminId, 'lead_investigator_id' => $investigatorId,
 ]);
 $case2 = upsertCase($pdo, [
     'case_number' => 'CASE-2026-002', 'title' => 'Project Shadowline',
-    'description' => 'Fictional demo case examining a suspected financial fraud ring using shell companies.',
+    'description' => 'Active unsolved financial fraud ring investigation examining shell companies and illicit wire transfers.',
     'category' => 'Financial Fraud', 'location' => 'Pune, Maharashtra', 'incident_date' => '2026-06-14',
-    'priority' => 'High', 'status' => 'Intelligence Review', 'tags' => 'fraud,shell-company,demo',
+    'priority' => 'High', 'status' => 'Intelligence Review', 'tags' => 'fraud,shell-company,unsolved',
+    'agency_reference' => 'FIR-FIU-2026-782', 'is_unsolved' => 1, 'osint_keywords' => 'fraud,shadowline,bank',
     'created_by' => $adminId, 'lead_investigator_id' => $analystId,
 ]);
 $case3 = upsertCase($pdo, [
     'case_number' => 'CASE-2026-003', 'title' => 'Operation Crosslink',
-    'description' => 'Fictional demo case tracking a cross-border communication network of interest.',
+    'description' => 'Open investigation tracking a cross-border communications and cyber intrusion network.',
     'category' => 'Cybercrime', 'location' => 'Delhi NCR', 'incident_date' => '2026-05-20',
-    'priority' => 'Medium', 'status' => 'New', 'tags' => 'cyber,communications,demo',
+    'priority' => 'Medium', 'status' => 'New', 'tags' => 'cyber,communications,unsolved',
+    'agency_reference' => 'FIR-CYBER-2026-339', 'is_unsolved' => 1, 'osint_keywords' => 'cyber,telecom',
+    'created_by' => $adminId, 'lead_investigator_id' => $investigatorId,
+]);
+$case4 = upsertCase($pdo, [
+    'case_number' => 'CASE-2026-004', 'title' => 'Unsolved Cyber Banking Ransomware Syndicate',
+    'description' => 'Real-time active unsolved investigation targeting an international ransomware syndicate conducting unauthorized bank transfers.',
+    'category' => 'Cybercrime', 'location' => 'Bengaluru, Karnataka', 'incident_date' => '2026-08-01',
+    'priority' => 'Critical', 'status' => 'Under Investigation', 'tags' => 'ransomware,banking,unsolved,real-time',
+    'agency_reference' => 'FIR-CYBER-2026-8891', 'is_unsolved' => 1, 'osint_keywords' => 'ransomware,banking,shadowphish',
+    'created_by' => $adminId, 'lead_investigator_id' => $analystId,
+]);
+$case5 = upsertCase($pdo, [
+    'case_number' => 'CASE-2026-005', 'title' => 'Operation Darknet Cargo - Multi-State Trafficking Ring',
+    'description' => 'Real-time active unsolved case investigating high-value illegal cargo shipments moved across state borders.',
+    'category' => 'Organized Crime', 'location' => 'Navi Mumbai, Maharashtra', 'incident_date' => '2026-08-15',
+    'priority' => 'Critical', 'status' => 'New', 'tags' => 'trafficking,cargo,unsolved,real-time',
+    'agency_reference' => 'FIR-ORGANIZED-2026-402', 'is_unsolved' => 1, 'osint_keywords' => 'cargo,darknet,trucking',
     'created_by' => $adminId, 'lead_investigator_id' => $investigatorId,
 ]);
 echo "Demo cases seeded.\n";
 
 $isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
-foreach ([$case1 => $investigatorId, $case2 => $analystId, $case3 => $investigatorId] as $caseId => $userId) {
+foreach ([$case1 => $investigatorId, $case2 => $analystId, $case3 => $investigatorId, $case4 => $analystId, $case5 => $investigatorId] as $caseId => $userId) {
     $sql = $isSqlite 
         ? 'INSERT OR IGNORE INTO case_assignments (case_id, user_id, assigned_by) VALUES (?, ?, ?)'
         : 'INSERT IGNORE INTO case_assignments (case_id, user_id, assigned_by) VALUES (?, ?, ?)';
@@ -182,6 +201,22 @@ $person1 = addEntity($pdo, $case2, $typeIds['Person'], 'Devika Rao', 'Fictional 
 addRelationship($pdo, $case2, $person1, $vendor, $relIds['WORKS_FOR'], 3);
 addRelationship($pdo, $case2, $vendor, $acct1, $relIds['ASSOCIATED_WITH'], 5);
 echo "Demo entities & relationships seeded for Project Shadowline.\n";
+
+// Real-Time Unsolved Case 4 (Ransomware Syndicate - Overlaps with Rohan Verma & ACC-XXXX-7742)
+$rohanC4 = addEntity($pdo, $case4, $typeIds['Person'], 'Rohan Verma', 'Suspect identified in ransomware wire transfers.', 88);
+$acctC4  = addEntity($pdo, $case4, $typeIds['Bank Account'], 'ACC-XXXX-7742', 'Illicit ransom payout receiving account.', 80);
+$orgC4   = addEntity($pdo, $case4, $typeIds['Organization'], 'ShadowPhish Syndicate', 'International ransomware extortion gang.', 92);
+addRelationship($pdo, $case4, $rohanC4, $orgC4, $relIds['WORKS_FOR'], 6);
+addRelationship($pdo, $case4, $orgC4, $acctC4, $relIds['TRANSFERRED_MONEY_TO'], 9);
+echo "Demo entities & relationships seeded for Case 4.\n";
+
+// Real-Time Unsolved Case 5 (Darknet Cargo - Overlaps with Aarav Mehta & MH-04-AB-1234)
+$aaravC5 = addEntity($pdo, $case5, $typeIds['Person'], 'Aarav Mehta', 'Prime suspect in interstate cargo theft ring.', 94);
+$vehC5   = addEntity($pdo, $case5, $typeIds['Vehicle'], 'MH-04-AB-1234', 'Heavy transport truck spotted at Navi Mumbai port.', 82);
+$locC5   = addEntity($pdo, $case5, $typeIds['Location'], 'Navi Mumbai Port Hub', 'Container terminal cargo staging area.', 50);
+addRelationship($pdo, $case5, $aaravC5, $vehC5, $relIds['OWNS'], 7);
+addRelationship($pdo, $case5, $vehC5, $locC5, $relIds['VISITED'], 8);
+echo "Demo entities & relationships seeded for Case 5.\n";
 
 // --- Demo audit logs & notifications ---
 $auditSql = $isSqlite 

@@ -26,6 +26,8 @@ if ($search !== '') {
 if ($status !== '') { $where[] = 'c.status = ?'; $params[] = $status; }
 if ($priority !== '') { $where[] = 'c.priority = ?'; $params[] = $priority; }
 if ($category !== '') { $where[] = 'c.category = ?'; $params[] = $category; }
+$isUnsolved = $_GET['is_unsolved'] ?? '';
+if ($isUnsolved !== '') { $where[] = 'c.is_unsolved = ?'; $params[] = (int)$isUnsolved; }
 
 $whereSql = implode(' AND ', $where);
 

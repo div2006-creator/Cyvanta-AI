@@ -13,8 +13,8 @@ $caseNumber = cg_generate_case_id();
 $leadId = !empty($input['lead_investigator_id']) ? (int)$input['lead_investigator_id'] : $user['id'];
 
 $stmt = $pdo->prepare(
-    'INSERT INTO cases (case_number, title, description, category, location, incident_date, priority, status, tags, created_by, lead_investigator_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+    'INSERT INTO cases (case_number, title, description, category, location, incident_date, priority, status, tags, agency_reference, is_unsolved, osint_keywords, created_by, lead_investigator_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
 );
 $stmt->execute([
     $caseNumber,
@@ -26,6 +26,9 @@ $stmt->execute([
     $input['priority'] ?? 'Medium',
     $input['status'] ?? 'New',
     $input['tags'] ?? null,
+    $input['agency_reference'] ?? ('FIR-' . date('Y') . '-' . rand(1000, 9999)),
+    isset($input['is_unsolved']) ? (int)$input['is_unsolved'] : 1,
+    $input['osint_keywords'] ?? null,
     $user['id'],
     $leadId,
 ]);

@@ -15,7 +15,7 @@
   function loadTab(name) {
     const fns = {
       overview: loadSnapshot, network: loadGraph, entities: loadEntities,
-      documents: loadDocuments, evidence: loadEvidence, timeline: loadTimeline,
+      documents: loadDocuments, osint: loadOsint, evidence: loadEvidence, timeline: loadTimeline,
       analysis: loadAnalysis, notes: loadNotes, activity: loadActivity,
       reports: loadReports
     };
@@ -28,6 +28,26 @@
     if (!data.success) return;
     const s = data.data.snapshot;
     const members = data.data.assigned_members || [];
+
+    const crossRes = await cgApi(`/api/analysis/cross-case-matches.php?case_id=${caseId}`);
+    const alertsEl = document.getElementById('cgCrossCaseAlerts');
+    if (alertsEl && crossRes.success && crossRes.data.items && crossRes.data.items.length) {
+      alertsEl.innerHTML = `
+        <div class="alert alert-warning border-warning d-flex align-items-start gap-3 mb-3 shadow-sm" style="background:#fffbe6;border-left:4px solid #f59e0b!important">
+          <i class="fa-solid fa-triangle-exclamation fs-4 text-warning mt-1"></i>
+          <div>
+            <div class="fw-800 text-dark">CROSS-CASE SUSPECT & ENTITY OVERLAP DETECTED (${crossRes.data.items.length} Matches)</div>
+            <div class="small text-secondary mb-2">Automated intelligence matching flagged entities in this case that match suspects/records in other active unsolved cases:</div>
+            <ul class="mb-0 small ps-3 text-dark">
+              ${crossRes.data.items.map(m => `
+                <li class="py-1"><strong>${m.entity_name}</strong> <span class="badge bg-secondary">${m.entity_type}</span> matches <a href="case-details.php?id=${m.target_case_id}" class="fw-700 text-primary">${m.target_case_number} — ${m.target_case_title}</a> (${m.confidence_score}% Match Confidence)</li>
+              `).join('')}
+            </ul>
+          </div>
+        </div>`;
+    } else if (alertsEl) {
+      alertsEl.innerHTML = '';
+    }
 
     document.getElementById('cgCaseSnapshot').innerHTML = `
       <div class="row g-2 mb-3">
@@ -302,10 +322,51 @@
         if(res.success){
           cgToast(res.message||'Document uploaded successfully.','success');
           const modal=bootstrap.Modal.getInstance(document.getElementById('cgDocModal'));if(modal)modal.hide();
-          docForm.reset();loaded.documents=false;loaded.overview=false;loadDocuments();loadSnapshot();
-        }else cgToast(res.message||'Unable to upload the document.','error');
       }catch(e){console.error(e);cgToast('Unable to upload the document.','error');}
       finally{if(submit){submit.disabled=false;submit.innerHTML=submit.dataset.original||'Upload';}}
+    });
+  }
+
+  // ---------- Live OSINT tab ----------
+  async function loadOsint() {
+    const data = await cgApi(`/api/documents/list.php?case_id=${caseId}`);
+    const list = document.getElementById('cgOsintFeedList');
+    const empty = document.getElementById('cgOsintEmpty');
+    if (!list) return;
+    const osintDocs = (data.data?.items || []).filter(d => d.name.includes('[OSINT Live]') || (d.description || '').includes('OSINT'));
+    if (!osintDocs.length) { list.innerHTML = ''; empty.hidden = false; return; }
+    empty.hidden = true;
+    list.innerHTML = osintDocs.map(d => `
+      <div class="cg-card mb-3 p-3" style="border-left:4px solid var(--cg-accent,#0284c7)!important">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <span class="badge bg-info text-dark me-2">LIVE OSINT</span>
+            <span class="fw-700 text-white fs-6">${d.name}</span>
+          </div>
+          <span class="small text-muted">${new Date(d.uploaded_at).toLocaleString()}</span>
+        </div>
+        <div class="small text-muted mb-2">${d.description || ''} · Source: <strong class="text-white">${d.source || 'Open-Source'}</strong></div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="cg-badge-status status-resolved">${d.status}</span>
+        </div>
+      </div>`).join('');
+  }
+  const osintForm = document.getElementById('cgOsintForm');
+  if (osintForm) {
+    osintForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = Object.fromEntries(new FormData(osintForm).entries());
+      payload.case_id = caseId;
+      const res = await cgApi('/api/osint/ingest.php', { method: 'POST', body: JSON.stringify(payload) });
+      if (res.success) {
+        cgToast(res.message, 'success');
+        bootstrap.Modal.getInstance(document.getElementById('cgOsintModal'))?.hide();
+        osintForm.reset();
+        loaded.osint = false; loaded.overview = false; loaded.network = false; loaded.entities = false;
+        loadOsint(); loadSnapshot();
+      } else {
+        cgToast(res.message || 'Failed to ingest OSINT feed.', 'error');
+      }
     });
   }
 
