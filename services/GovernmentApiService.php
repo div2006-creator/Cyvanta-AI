@@ -40,6 +40,25 @@ class GovernmentApiService
         ];
     }
 
+    private function saveSetting(string $key, string $value): void
+    {
+        $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'mysql') {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO system_settings (setting_key, setting_value, updated_at)
+                VALUES (?, ?, NOW())
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()
+            ");
+        } else {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO system_settings (setting_key, setting_value, updated_at)
+                VALUES (?, ?, NOW())
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+            ");
+        }
+        $stmt->execute([$key, $value]);
+    }
+
     /**
      * Update API configuration
      */
@@ -53,15 +72,9 @@ class GovernmentApiService
             'gov_api_interval' => (string) max(1, (int) ($input['sync_interval_mins'] ?? 15))
         ];
 
-        $stmt = $this->pdo->prepare("
-            INSERT INTO system_settings (setting_key, setting_value, updated_at)
-            VALUES (?, ?, NOW())
-            ON CONFLICT(setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
-        ");
-
         foreach ($keys as $k => $v) {
             if ($v !== '') {
-                $stmt->execute([$k, $v]);
+                $this->saveSetting($k, $v);
             }
         }
     }
@@ -174,7 +187,7 @@ class GovernmentApiService
 
             // Add sample evidence records
             $evStmt = $this->pdo->prepare("
-                INSERT INTO evidence (case_id, evidence_type, description, source, confidentiality, created_by, created_at)
+                INSERT INTO evidence (case_id, evidence_type, description, source, confidentiality, uploaded_by, created_at)
                 VALUES (?, 'Digital / Official Feed', ?, 'Government CCTNS API', 'Restricted', ?, NOW())
             ");
             foreach ($tmpl['evidence'] as $evTitle) {
@@ -201,13 +214,8 @@ class GovernmentApiService
 
         // Update system settings for last sync
         $newTotal = $config['total_ingested'] + $ingestedCount;
-        $upd = $this->pdo->prepare("
-            INSERT INTO system_settings (setting_key, setting_value, updated_at)
-            VALUES (?, ?, NOW())
-            ON CONFLICT(setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
-        ");
-        $upd->execute(['gov_api_last_sync', date('Y-m-d H:i:s')]);
-        $upd->execute(['gov_api_total_ingested', (string) $newTotal]);
+        $this->saveSetting('gov_api_last_sync', date('Y-m-d H:i:s'));
+        $this->saveSetting('gov_api_total_ingested', (string) $newTotal);
 
         // Audit log
         cg_log_audit(
