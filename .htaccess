@@ -1,0 +1,10 @@
+# CYVANTA Root Apache Configuration
+# Directs all web traffic into the public/ document root
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If the request is not already pointing inside public/
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L,QSA]
+</IfModule>
