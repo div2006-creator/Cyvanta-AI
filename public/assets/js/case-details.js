@@ -1,13 +1,10 @@
 (function () {
   const caseId = window.CG_CASE_ID;
-  const tabs = document.querySelectorAll('.cg-tab');
-  const panels = document.querySelectorAll('.cg-tab-panel');
   const loaded = {};
 
-  const statusSelect = document.getElementById('cgCaseStatusSelect');
-  if (statusSelect) {
-    statusSelect.addEventListener('change', async function () {
-      const newStatus = this.value;
+  document.addEventListener('change', async function (e) {
+    if (e.target && e.target.id === 'cgCaseStatusSelect') {
+      const newStatus = e.target.value;
       const res = await cgApi('/api/cases/update.php', {
         method: 'POST',
         body: JSON.stringify({ id: caseId, status: newStatus })
@@ -22,27 +19,47 @@
       } else {
         cgToast(res.message || 'Failed to update case status.', 'error');
       }
-    });
-  }
+    }
+  });
 
   function activateTab(name) {
     if (!name) return;
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    panels.forEach(p => p.hidden = p.id !== `tab-${name}`);
+    const allTabs = document.querySelectorAll('.cg-tab');
+    allTabs.forEach(t => {
+      if (t.dataset.tab === name) {
+        t.classList.add('active');
+      } else {
+        t.classList.remove('active');
+      }
+    });
+
+    const allPanels = document.querySelectorAll('.cg-tab-panel');
+    allPanels.forEach(p => {
+      if (p.id === `tab-${name}`) {
+        p.removeAttribute('hidden');
+        p.style.display = 'block';
+      } else {
+        p.setAttribute('hidden', 'true');
+        p.style.display = 'none';
+      }
+    });
+
     if (!loaded[name]) {
       loaded[name] = true;
       try { loadTab(name); } catch (e) { console.error('Tab load error:', e); }
     }
     if (name === 'network' && window.cgGraphInstance) {
-      setTimeout(() => { try { window.cgGraphInstance.fit(); } catch (e) {} }, 50);
+      setTimeout(() => { try { window.cgGraphInstance.fit(); } catch (e) {} }, 80);
     }
   }
 
-  document.getElementById('cgTabs')?.addEventListener('click', (e) => {
+  document.addEventListener('click', function (e) {
     const tabEl = e.target.closest('.cg-tab');
-    if (tabEl && tabEl.dataset.tab) activateTab(tabEl.dataset.tab);
+    if (tabEl && tabEl.dataset.tab) {
+      e.preventDefault();
+      activateTab(tabEl.dataset.tab);
+    }
   });
-  tabs.forEach(t => t.addEventListener('click', () => activateTab(t.dataset.tab)));
 
   function loadTab(name) {
     const fns = {
