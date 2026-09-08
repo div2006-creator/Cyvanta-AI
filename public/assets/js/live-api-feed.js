@@ -71,7 +71,7 @@
     if (connected) {
       if (wsBadge) {
         wsBadge.className = 'badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-700 d-flex align-items-center gap-2';
-        wsBadge.innerHTML = '<span class="spinner-grow spinner-grow-sm text-success" role="status"></span> LIVE — WEBSOCKET CONNECTED';
+        wsBadge.innerHTML = '<span class="spinner-grow spinner-grow-sm text-success" role="status"></span> SYSTEM ONLINE — WEBSOCKET CONNECTED';
       }
       if (wsStateLabel) { wsStateLabel.className = 'fw-700 text-success'; wsStateLabel.textContent = 'Connected'; }
       if (pollStateLabel) { pollStateLabel.className = 'fw-700 text-muted'; pollStateLabel.textContent = 'Disabled'; }

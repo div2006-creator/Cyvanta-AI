@@ -18,10 +18,10 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
   </div>
   <div class="d-flex align-items-center gap-2">
     <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-700 d-flex align-items-center gap-2" id="cgWsConnectionBadge">
-      <span class="spinner-grow spinner-grow-sm text-success" role="status"></span> LIVE — WEBSOCKET CONNECTED
+      <span class="spinner-grow spinner-grow-sm text-success" role="status"></span> SYSTEM ONLINE — WEBSOCKET CONNECTED
     </span>
     <span class="badge bg-warning bg-opacity-10 text-dark border border-warning px-3 py-2 fw-700" id="cgSimStatusBadge" style="display:none">
-      <i class="fa-solid fa-play me-1 text-warning"></i> SIMULATION RUNNING
+      <i class="fa-solid fa-play me-1 text-warning"></i> DEMONSTRATION SIMULATION RUNNING
     </span>
     <button class="cg-btn cg-btn-outline" id="cgToggleSimBtn"><i class="fa-solid fa-play me-1 text-warning"></i> Start Simulation</button>
     <button class="cg-btn cg-btn-outline" data-bs-toggle="modal" data-bs-target="#cgIngestEventModal"><i class="fa-solid fa-plus me-1"></i> Ingest Event</button>
@@ -37,6 +37,12 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
     <i class="fa-solid fa-network-wired text-primary me-1"></i> WebSocket: <span class="fw-700 text-success" id="cgWsStateLabel">Connected</span> | Fallback Polling: <span class="fw-700 text-muted" id="cgPollStateLabel">Disabled</span>
   </div>
   <div class="small text-muted" id="cgLastSyncTimeLabel">Last sync: Just now</div>
+</div>
+
+<!-- Demo Mode Callout Banner -->
+<div class="alert alert-info border-info bg-info bg-opacity-10 d-flex align-items-center gap-2 mb-3 px-3 py-2 text-dark small fw-600 rounded">
+  <i class="fa-solid fa-triangle-exclamation text-info fs-6"></i>
+  <span><strong>Demo Mode:</strong> Intelligence events shown here are synthetic demonstration data unless explicitly marked as verified from an authorized source.</span>
 </div>
 
 <!-- Dashboard Metrics Row -->

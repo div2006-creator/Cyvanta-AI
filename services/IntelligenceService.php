@@ -74,7 +74,7 @@ class SimulationSource extends IngestionSource
         $syntheticPool = [
             [
                 'event_type' => 'FINANCIAL_NETWORK',
-                'title' => 'LIVE INTELLIGENCE: Financial Network Alert',
+                'title' => 'Simulation: Financial Network Alert',
                 'description' => 'Synthetic financial intelligence alert tracking rapid layering transactions between shell entity Company Alpha and Account 001.',
                 'source_type' => 'SIMULATION',
                 'source_name' => 'CNI Demonstration Generator',
@@ -102,7 +102,7 @@ class SimulationSource extends IngestionSource
             ],
             [
                 'event_type' => 'ARMS_NETWORK',
-                'title' => 'LIVE INTELLIGENCE: Interstate Arms Network',
+                'title' => 'Simulation: Interstate Arms Network',
                 'description' => 'Synthetic logistics telemetry tracking unverified armaments movement across inter-state border checkposts.',
                 'source_type' => 'SIMULATION',
                 'source_name' => 'CNI Demonstration Generator',
@@ -128,7 +128,7 @@ class SimulationSource extends IngestionSource
             ],
             [
                 'event_type' => 'CYBER_NETWORK',
-                'title' => 'LIVE INTELLIGENCE: Cyber Extortion Cluster',
+                'title' => 'Simulation: Cyber Extortion Cluster',
                 'description' => 'Synthetic cyber threat intelligence monitoring anomalous command-and-control communication from host node Alpha-1.',
                 'source_type' => 'SIMULATION',
                 'source_name' => 'CNI Demonstration Generator',
