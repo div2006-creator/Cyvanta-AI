@@ -54,6 +54,7 @@ p, span, div, label, td, th, li, a, h1, h2, h3, h4, h5, h6, input, select, texta
 .cg-badge-status.status-new { background: rgba(2, 132, 199, 0.12); color: #0284c7 !important; border: 1px solid rgba(2, 132, 199, 0.25); }
 .cg-badge-status.status-under-investigation, .cg-priority.priority-high { background: rgba(217, 119, 6, 0.12); color: #d97706 !important; border: 1px solid rgba(217, 119, 6, 0.25); }
 .cg-badge-status.status-intelligence-review { background: rgba(124, 58, 237, 0.12); color: #7c3aed !important; border: 1px solid rgba(124, 58, 237, 0.25); }
+.cg-badge-status.status-unsolved-cold-case, .cg-badge-status.status-unsolved, .cg-badge-status.status-cold-case { background: rgba(225, 29, 72, 0.14); color: #e11d48 !important; border: 1px solid rgba(225, 29, 72, 0.3); }
 .cg-badge-status.status-critical, .cg-priority.priority-critical, .cg-ws-status.offline, .cg-toast.error { background: rgba(220, 38, 38, 0.12); color: #dc2626 !important; border: 1px solid rgba(220, 38, 38, 0.25); }
 .cg-badge-status.status-resolved, .cg-metric-change.up, .cg-toast.success { background: rgba(5, 150, 105, 0.12); color: #059669 !important; border: 1px solid rgba(5, 150, 105, 0.25); }
 .cg-badge-status.status-archived { background: rgba(100, 116, 139, 0.12); color: #64748b !important; border: 1px solid rgba(100, 116, 139, 0.25); }

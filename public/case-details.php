@@ -17,7 +17,7 @@ $activeNav = 'cases';
 $pageScripts = ['case-details.js'];
 require __DIR__ . '/../includes/partials/header.php';
 
-function statusClass($s) { return 'status-' . strtolower(str_replace(' ', '-', $s)); }
+function statusClass($s) { return 'status-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($s)); }
 function priorityClass($p) { return 'priority-' . strtolower($p); }
 ?>
 
@@ -37,7 +37,7 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
       </div>
     </div>
     <select id="cgCaseStatusSelect" class="cg-form-select" style="width:auto">
-      <?php foreach (['New','Under Investigation','Intelligence Review','Critical','Resolved','Archived'] as $s): ?>
+      <?php foreach (['New','Under Investigation','Intelligence Review','Unsolved / Cold Case','Critical','Resolved','Archived'] as $s): ?>
         <option <?= $s === $case['status'] ? 'selected' : '' ?>><?= $s ?></option>
       <?php endforeach; ?>
     </select>

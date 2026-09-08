@@ -5,7 +5,7 @@
   const fPriority = document.getElementById('cgFilterPriority');
   const fCategory = document.getElementById('cgFilterCategory');
 
-  function statusClass(s) { return 'status-' + s.toLowerCase().replace(/\s+/g, '-'); }
+  function statusClass(s) { return 'status-' + (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
   function priorityClass(p) { return 'priority-' + p.toLowerCase(); }
 
   async function load(page = 1) {

@@ -1,5 +1,5 @@
 (function () {
-  function statusClass(s) { return 'status-' + s.toLowerCase().replace(/\s+/g, '-'); }
+  function statusClass(s) { return 'status-' + (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
   function priorityClass(p) { return 'priority-' + p.toLowerCase(); }
 
   async function load() {
@@ -11,7 +11,7 @@
         <td class="fw-600 text-white">${c.title}</td>
         <td>
           <select class="cg-form-select cg-btn-sm" style="width:auto" onchange="cgAdminUpdateCase(${c.id}, 'status', this.value)">
-            ${['New','Under Investigation','Intelligence Review','Critical','Resolved','Archived'].map(s => `<option ${s === c.status ? 'selected' : ''}>${s}</option>`).join('')}
+            ${['New','Under Investigation','Intelligence Review','Unsolved / Cold Case','Critical','Resolved','Archived'].map(s => `<option ${s === c.status ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </td>
         <td>

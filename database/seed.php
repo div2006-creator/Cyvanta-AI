@@ -124,11 +124,18 @@ $case3 = upsertCase($pdo, [
     'priority' => 'Medium', 'status' => 'New', 'tags' => 'cyber,communications,demo',
     'created_by' => $adminId, 'lead_investigator_id' => $investigatorId,
 ]);
+$case4 = upsertCase($pdo, [
+    'case_number' => 'CASE-2026-004', 'title' => 'Cold Case - Operation Phantom',
+    'description' => 'Unsolved commercial burglary intelligence file with unidentified suspect photos and phone numbers awaiting AI link discovery.',
+    'category' => 'Commercial Burglary', 'location' => 'Bengaluru, Karnataka', 'incident_date' => '2025-11-15',
+    'priority' => 'High', 'status' => 'Unsolved / Cold Case', 'tags' => 'unsolved,cold-case,burglary',
+    'created_by' => $adminId, 'lead_investigator_id' => $investigatorId,
+]);
 echo "Demo cases seeded.\n";
 
 $isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
-foreach ([$case1 => $investigatorId, $case2 => $analystId, $case3 => $investigatorId] as $caseId => $userId) {
+foreach ([$case1 => $investigatorId, $case2 => $analystId, $case3 => $investigatorId, $case4 => $investigatorId] as $caseId => $userId) {
     $sql = $isSqlite 
         ? 'INSERT OR IGNORE INTO case_assignments (case_id, user_id, assigned_by) VALUES (?, ?, ?)'
         : 'INSERT IGNORE INTO case_assignments (case_id, user_id, assigned_by) VALUES (?, ?, ?)';
