@@ -21,9 +21,9 @@
     user: <?= json_encode($user) ?>
   };
 </script>
-<script src="<?= $base ?>/assets/js/app.js"></script>
+<script src="<?= $base ?>/assets/js/app.js?v=<?= time() ?>"></script>
 <?php if (!empty($pageScripts)) foreach ($pageScripts as $src): ?>
-<script src="<?= $base ?>/assets/js/<?= $src ?>"></script>
+<script src="<?= $base ?>/assets/js/<?= $src ?>?v=<?= time() ?>"></script>
 <?php endforeach; ?>
 </body>
 </html>
