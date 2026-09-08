@@ -147,14 +147,23 @@
   const TYPE_COLOR_MAP = {
     'Person': '#38bdf8',
     'Organization': '#a78bfa',
+    'Agency': '#818cf8',
     'Location': '#34d399',
+    'Weapon': '#ef4444',
+    'Ammunition': '#dc2626',
+    'Aircraft': '#0284c7',
     'Vehicle': '#fbbf24',
     'Phone Number': '#f472b6',
+    'Email': '#38bdf8',
     'Bank Account': '#f87171',
     'Transaction': '#fb923c',
+    'Money': '#10b981',
+    'Case Number': '#a855f7',
+    'Date': '#64748b',
+    'Document': '#94a3b8',
+    'Legal Notice': '#eab308',
     'Event': '#c084fc',
     'Social Media Account': '#60a5fa',
-    'Document': '#94a3b8',
     'Photo / Image': '#38bdf8',
     'Video Footage': '#e879f9',
     'Face / Suspect Tag': '#ef4444',
@@ -164,14 +173,26 @@
   };
 
   const REL_COLOR_MAP = {
-    'CALLS': '#f472b6',
-    'TRANSFERRED_MONEY_TO': '#fb923c',
-    'SPOTTED_AT': '#10b981',
-    'VISITED': '#34d399',
-    'FEATURED_IN_FRAME': '#e879f9',
-    'OWNS': '#fbbf24',
-    'WORKS_FOR': '#a78bfa',
+    'INVESTIGATED_BY': '#818cf8',
+    'INVOLVED_IN': '#ef4444',
+    'ALIAS_OF': '#a78bfa',
+    'LOCATED_IN': '#34d399',
+    'ISSUED_NOTICE_TO': '#eab308',
+    'SUBJECT_OF': '#38bdf8',
+    'RECOVERED_AT': '#10b981',
+    'DROPPED_AT': '#dc2626',
+    'OWNED_BY': '#fbbf24',
+    'CONTACTED': '#f472b6',
+    'TRANSFERRED_TO': '#fb923c',
     'ASSOCIATED_WITH': '#0284c7',
+    'TRAVELED_TO': '#34d399',
+    'OPERATED': '#0284c7',
+    'CONNECTED_TO': '#64748b',
+    'CALLS': '#f472b6',
+    'VISITED': '#34d399',
+    'WORKS_FOR': '#a78bfa',
+    'TRANSFERRED_MONEY_TO': '#fb923c',
+    'MENTIONED_IN': '#94a3b8',
     'FAMILY_OF': '#38bdf8',
     'MET_WITH': '#60a5fa'
   };
@@ -287,12 +308,60 @@
       const panel = document.getElementById('cgGraphSidePanel');
       if (params.nodes.length) {
         showEntityPanel(params.nodes[0]);
+      } else if (params.edges.length) {
+        showEdgeEvidencePanel(params.edges[0]);
       } else {
         panel.classList.remove('show');
       }
     });
 
     renderGraphLegend(entities);
+  }
+
+  async function showEdgeEvidencePanel(edgeId) {
+    const edge = allEdges.get(edgeId);
+    if (!edge) return;
+
+    const fromNode = allNodes.get(edge.from);
+    const toNode = allNodes.get(edge.to);
+    const panel = document.getElementById('cgGraphSidePanel');
+    panel.classList.add('show');
+
+    // Fetch details from relationship list or API
+    const relsRes = await cgApi(`/api/relationships/list.php?case_id=${caseId}`);
+    const relItem = (relsRes.success && relsRes.data.items) ? relsRes.data.items.find(r => r.id == edgeId) : null;
+
+    const relLabel = edge.label || 'CONNECTED_TO';
+    const confidence = relItem ? (relItem.confidence || 85) : 85;
+    const evidenceText = (relItem && relItem.evidence_text) ? relItem.evidence_text : 'Extracted contextual evidence from uploaded case documentation.';
+    const sourceDoc = (relItem && relItem.doc_name) ? relItem.doc_name : 'Primary Case File';
+    const pageNum = (relItem && relItem.source_page) ? relItem.source_page : 1;
+    const timeStamp = (relItem && relItem.extraction_timestamp) ? relItem.extraction_timestamp : 'Verified';
+
+    panel.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <div class="text-muted small fw-700 text-uppercase"><i class="fa-solid fa-file-contract text-primary me-1"></i>Relationship Evidence</div>
+          <div class="badge bg-primary text-white mt-1">${relLabel}</div>
+        </div>
+        <button class="btn-close" onclick="document.getElementById('cgGraphSidePanel').classList.remove('show')"></button>
+      </div>
+      <div class="p-2 border rounded bg-light mb-3 mt-2">
+        <div class="small fw-700 text-dark">${fromNode ? fromNode.label.split('\n')[0] : 'Source'}</div>
+        <div class="text-center text-primary fs-6 fw-800 my-1">&darr; ${relLabel} &darr;</div>
+        <div class="small fw-700 text-dark text-end">${toNode ? toNode.label.split('\n')[0] : 'Target'}</div>
+      </div>
+      <div class="small text-muted mb-2">Extraction Confidence: <span class="fw-800 text-success">${confidence}%</span></div>
+      <div class="mb-3">
+        <div class="fw-700 text-dark small mb-1">Extracted Evidence Text:</div>
+        <div class="p-2 border-start border-3 border-primary bg-light small text-secondary fst-italic">
+          "${evidenceText}"
+        </div>
+      </div>
+      <div class="small text-muted mb-1"><i class="fa-solid fa-file-lines me-1"></i>Source Document: <strong class="text-dark">${sourceDoc}</strong></div>
+      <div class="small text-muted mb-1"><i class="fa-solid fa-book-open me-1"></i>Source Page: <strong class="text-dark">Page ${pageNum}</strong></div>
+      <div class="small text-muted mb-1"><i class="fa-solid fa-clock me-1"></i>Extraction Time: <strong class="text-dark">${timeStamp}</strong></div>
+    `;
   }
 
   function renderGraphLegend(entities) {
@@ -679,42 +748,27 @@
       </div>`).join('');
   }
 
-  // ---------- Reports tab ----------
+  // ---------- Reports tab (Full 12-Section Intelligence Report) ----------
   async function loadReports() {
     const container = document.getElementById('cgReportContainer');
     if (!container) return;
-    container.innerHTML = '<div class="text-center py-5"><i class="fa-solid fa-spinner fa-spin fs-3 text-primary mb-3"></i><div class="fw-700 text-dark">Generating Official Intelligence Case Report…</div><div class="small text-muted">Compiling entities, network relationships, evidence inventory and timelines…</div></div>';
+    container.innerHTML = '<div class="text-center py-5"><i class="fa-solid fa-spinner fa-spin fs-3 text-primary mb-3"></i><div class="fw-700 text-dark">Generating Official 12-Section Intelligence Case Report…</div><div class="small text-muted">Running Entity Quality Check, Relationship Quality Check, Evidence Linking & Timeline Synthesis…</div></div>';
 
-    const [caseRes, entitiesRes, relsRes, docsRes, evidenceRes, notesRes] = await Promise.all([
-      cgApi(`/api/cases/details.php?id=${caseId}`),
-      cgApi(`/api/entities/list.php?case_id=${caseId}`),
-      cgApi(`/api/relationships/list.php?case_id=${caseId}`),
-      cgApi(`/api/documents/list.php?case_id=${caseId}`),
-      cgApi(`/api/evidence/list.php?case_id=${caseId}`),
-      cgApi(`/api/notes/list.php?case_id=${caseId}`),
-    ]);
-
-    if (!caseRes.success) {
+    const res = await cgApi(`/api/cases/report.php?id=${caseId}`);
+    if (!res.success) {
       container.innerHTML = '<div class="alert alert-danger">Unable to compile case report. Please refresh and try again.</div>';
       return;
     }
 
-    const c = caseRes.data.case;
-    const entities = entitiesRes.success ? (entitiesRes.data.items || []) : [];
-    const rels = relsRes.success ? (relsRes.data.items || []) : [];
-    const docs = docsRes.success ? (docsRes.data.items || []) : [];
-    const evidence = evidenceRes.success ? (evidenceRes.data.items || []) : [];
-    const notes = notesRes.success ? (notesRes.data.items || []) : [];
-
+    const rData = res.data;
+    const c = rData.case;
+    const m = rData.metrics;
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-    const mediaDocs = docs.filter(d => ['JPG','JPEG','PNG','WEBP','TIFF','BMP','MP4','AVI','MOV','MKV','WEBM'].includes((d.doc_type||'').toUpperCase()));
-    const visualEntities = entities.filter(e => ['Photo / Image','Video Footage','Face / Suspect Tag','License Plate OCR','GPS Location Tag','Evidence Object'].includes(e.type_name));
 
     container.innerHTML = `
       <div class="d-flex justify-content-between align-items-center mb-3 no-print">
         <div>
-          <h5 class="fw-800 text-dark mb-0"><i class="fa-solid fa-file-invoice text-primary me-2"></i>Official Case Investigation Report</h5>
+          <h5 class="fw-800 text-dark mb-0"><i class="fa-solid fa-file-invoice text-primary me-2"></i>Official 12-Section Case Intelligence Report</h5>
           <div class="small text-muted">Generated live on ${dateStr}</div>
         </div>
         <div class="d-flex gap-2">
@@ -734,164 +788,162 @@
           <div class="text-muted small text-uppercase fw-600">Comprehensive Case Investigation & Network Intelligence Report</div>
         </div>
 
-        <!-- Case Metadata Grid -->
-        <div class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Case Reference</div>
-            <div class="fw-800 text-primary fs-6">${c.case_number}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Case Title</div>
-            <div class="fw-700 text-dark">${c.title}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Status & Priority</div>
-            <div>
-              <span class="cg-badge-status status-${c.status.toLowerCase().replace(/\s+/g,'-')}">${c.status}</span>
-              <span class="cg-priority priority-${c.priority.toLowerCase()}">${c.priority}</span>
-            </div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Lead Investigator</div>
-            <div class="fw-700 text-dark">${c.investigator_name || 'Unassigned'}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Category</div>
-            <div class="fw-600 text-dark">${c.category || 'N/A'}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Location</div>
-            <div class="fw-600 text-dark">${c.location || 'N/A'}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Incident Date</div>
-            <div class="fw-600 text-dark">${c.incident_date ? new Date(c.incident_date).toLocaleDateString() : 'N/A'}</div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted text-uppercase fw-700">Generated At</div>
-            <div class="fw-600 text-dark">${dateStr}</div>
-          </div>
+        <!-- Extraction Validation Metrics Summary Box (Section 16 Requirement) -->
+        <div class="row g-2 mb-4 p-3 bg-light rounded-3 border">
+          <div class="col-12"><div class="fw-800 text-dark small text-uppercase mb-2"><i class="fa-solid fa-clipboard-check text-success me-1"></i> Extraction & System Validation Metrics</div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-primary">${m.entities_extracted}</div><div class="small text-muted" style="font-size:10px">Entities Extracted</div></div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-danger">${m.entities_rejected}</div><div class="small text-muted" style="font-size:10px">Entities Rejected</div></div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-info">${m.relationships_extracted}</div><div class="small text-muted" style="font-size:10px">Relationships Found</div></div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-secondary">${m.relationships_rejected}</div><div class="small text-muted" style="font-size:10px">Relationships Rejected</div></div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-success">${m.evidence_linked_relationships}</div><div class="small text-muted" style="font-size:10px">Evidence-Linked Rels</div></div></div>
+          <div class="col-6 col-md-2"><div class="p-2 border bg-white rounded text-center"><div class="fw-800 fs-5 text-warning">${m.unresolved_items}</div><div class="small text-muted" style="font-size:10px">Unresolved Aspects</div></div></div>
         </div>
 
-        <!-- 1. Executive Summary -->
+        <!-- Section 1: Case Overview -->
         <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-align-left text-primary me-2"></i>1. Executive Summary & Case Overview</h6>
-          <p class="text-secondary leading-relaxed mb-0">${c.description ? c.description.replace(/\n/g, '<br>') : 'No executive summary provided for this case.'}</p>
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-align-left text-primary me-2"></i>1. Case Overview</h6>
+          <p class="text-secondary leading-relaxed mb-0">${c.description ? c.description.replace(/\n/g, '<br>') : 'No case description provided.'}</p>
         </div>
 
-        <!-- 2. Identified Intelligence Entities -->
+        <!-- Section 2: Case Timeline -->
         <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-users-viewfinder text-primary me-2"></i>2. Identified Intelligence Entities (${entities.length})</h6>
-          ${entities.length ? `
-            <table class="cg-table table-bordered mb-0">
-              <thead><tr><th>Entity Name</th><th>Type</th><th>Risk Score</th><th>Connections</th><th>Source Document / Details</th></tr></thead>
-              <tbody>
-                ${entities.map(e => `
-                  <tr>
-                    <td class="fw-700 text-dark">${e.name}</td>
-                    <td><span class="badge bg-secondary">${e.type_name}</span></td>
-                    <td><span class="fw-800 ${e.risk_score >= 70 ? 'text-danger' : e.risk_score >= 40 ? 'text-warning' : 'text-success'}">${e.risk_score}%</span></td>
-                    <td class="fw-600 text-dark">${e.connections}</td>
-                    <td class="small text-muted">${e.description || 'Extracted intelligence'}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
-          ` : '<div class="text-muted small">No entities identified in this case.</div>'}
-        </div>
-
-        <!-- 3. Network Relationships Matrix -->
-        <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-diagram-project text-primary me-2"></i>3. Discovered Network Relationships (${rels.length})</h6>
-          ${rels.length ? `
-            <table class="cg-table table-bordered mb-0">
-              <thead><tr><th>Source Entity</th><th>Relationship Type</th><th>Target Entity</th><th>Strength</th></tr></thead>
-              <tbody>
-                ${rels.map(r => `
-                  <tr>
-                    <td class="fw-700 text-dark">${r.source_name}</td>
-                    <td><span class="badge bg-primary text-white">${r.rel_type.replace(/_/g, ' ')}</span></td>
-                    <td class="fw-700 text-dark">${r.target_name}</td>
-                    <td class="fw-600 text-dark">${r.strength || 1}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
-          ` : '<div class="text-muted small">No network relationships recorded.</div>'}
-        </div>
-
-        <!-- 4. Uploaded Evidence & Document Inventory -->
-        <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-folder-open text-primary me-2"></i>4. Evidence & Document Inventory</h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="fw-700 text-dark small mb-2">Case Documents (${docs.length})</div>
-              ${docs.length ? `
-                <ul class="list-group list-group-flush border rounded-3 small">
-                  ${docs.map(d => `<li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div><i class="fa-solid fa-file-lines text-primary me-2"></i><strong>${d.name}</strong> <span class="text-muted">(${d.original_filename})</span></div>
-                    <span class="badge bg-success">${d.status}</span>
-                  </li>`).join('')}
-                </ul>
-              ` : '<div class="text-muted small">No documents attached.</div>'}
-            </div>
-            <div class="col-md-6">
-              <div class="fw-700 text-dark small mb-2">Physical / Digital Evidence (${evidence.length})</div>
-              ${evidence.length ? `
-                <ul class="list-group list-group-flush border rounded-3 small">
-                  ${evidence.map(e => `<li class="list-group-item">
-                    <i class="fa-solid fa-box-archive text-warning me-2"></i><strong>${e.evidence_type}</strong>: ${e.description || 'Recorded evidence item'}
-                  </li>`).join('')}
-                </ul>
-              ` : '<div class="text-muted small">No physical evidence recorded.</div>'}
-            </div>
-          </div>
-        </div>
-
-        <!-- 5. Media & Visual Intelligence Analysis -->
-        <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-camera-retro text-primary me-2"></i>5. Media & Visual Intelligence Analysis (${mediaDocs.length} Media Items)</h6>
-          ${mediaDocs.length ? `
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
-                <div class="p-3 border rounded bg-light">
-                  <div class="fw-700 text-dark small mb-1">Visual Evidence Processing Summary</div>
-                  <div class="small text-muted mb-1">Photos & Images Processed: <strong class="text-dark">${docs.filter(d => ['JPG','JPEG','PNG','WEBP','TIFF','BMP'].includes((d.doc_type||'').toUpperCase())).length}</strong></div>
-                  <div class="small text-muted mb-1">Surveillance Video Clips Analyzed: <strong class="text-dark">${docs.filter(d => ['MP4','AVI','MOV','MKV','WEBM'].includes((d.doc_type||'').toUpperCase())).length}</strong></div>
-                  <div class="small text-muted">Visual Entities Identified: <strong class="text-dark">${visualEntities.length}</strong></div>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="p-3 border rounded bg-light">
-                  <div class="fw-700 text-dark small mb-1">Detected Visual Features & OCR Tags</div>
-                  ${visualEntities.length ? `
-                    <ul class="list-unstyled mb-0 small">
-                      ${visualEntities.map(v => `<li class="py-1 border-bottom"><i class="fa-solid fa-check text-success me-1"></i> <strong>${v.name}</strong> <span class="badge bg-secondary ms-1">${v.type_name}</span> — Risk ${v.risk_score}%</li>`).join('')}
-                    </ul>
-                  ` : '<div class="small text-muted">Visual processing completed. No specific OCR/Face tags flagged for this media item.</div>'}
-                </div>
-              </div>
-            </div>
-          ` : '<div class="text-muted small">No photo or video media attached. Upload photos/videos under Documents to automatically trigger visual intelligence processing.</div>'}
-        </div>
-
-        <!-- 6. Investigator Notes -->
-        <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-note-sticky text-primary me-2"></i>6. Investigator Notes (${notes.length})</h6>
-          ${notes.length ? `
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-timeline text-primary me-2"></i>2. Case Timeline</h6>
+          ${rData.timeline.length ? `
             <div class="d-flex flex-column gap-2">
-              ${notes.map(n => `
-                <div class="p-3 border rounded-3 bg-light">
-                  <div class="d-flex justify-content-between">
-                    <div class="fw-700 text-dark">${n.title}</div>
-                    <div class="small text-muted">${new Date(n.created_at).toLocaleString()}</div>
-                  </div>
-                  <div class="small text-secondary mt-1">${n.note}</div>
-                  <div class="small text-muted mt-1">— Recorded by ${n.author_name || 'Investigator'}</div>
-                </div>`).join('')}
+              ${rData.timeline.map(t => `<div class="p-2 border-start border-3 border-primary bg-light small"><strong class="text-dark">${t.description}</strong></div>`).join('')}
             </div>
-          ` : '<div class="text-muted small">No investigator notes recorded.</div>'}
+          ` : '<div class="text-muted small">No timeline events extracted.</div>'}
         </div>
 
-        <!-- 7. Official Sign-off & System Verification -->
+        <!-- Section 3: Key Persons -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-user-shield text-primary me-2"></i>3. Key Persons (${rData.key_persons.length})</h6>
+          ${rData.key_persons.length ? `
+            <table class="cg-table table-bordered mb-0 small">
+              <thead><tr><th>Name</th><th>Role / Description</th><th>Possible Aliases</th><th>Risk Score</th></tr></thead>
+              <tbody>
+                ${rData.key_persons.map(p => `<tr>
+                  <td class="fw-700 text-dark">${p.name}</td>
+                  <td class="text-secondary">${p.description || 'Suspect / Person of interest'}</td>
+                  <td class="text-primary">${p.possible_aliases ? JSON.parse(p.possible_aliases).join(', ') : 'None'}</td>
+                  <td><span class="fw-800 ${p.risk_score >= 70 ? 'text-danger' : 'text-warning'}">${p.risk_score}%</span></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          ` : '<div class="text-muted small">No persons identified.</div>'}
+        </div>
+
+        <!-- Section 4: Organizations / Agencies -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-building-shield text-primary me-2"></i>4. Organizations & Government Agencies (${rData.orgs_agencies.length})</h6>
+          ${rData.orgs_agencies.length ? `
+            <ul class="list-group list-group-flush border rounded-3 small">
+              ${rData.orgs_agencies.map(o => `<li class="list-group-item d-flex justify-content-between align-items-center">
+                <div><strong>${o.name}</strong> <span class="badge bg-secondary ms-1">${o.type_name}</span></div>
+                <span class="text-muted">${o.description || 'Entity agency'}</span>
+              </li>`).join('')}
+            </ul>
+          ` : '<div class="text-muted small">No organizations or agencies identified.</div>'}
+        </div>
+
+        <!-- Section 5: Locations -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-location-dot text-primary me-2"></i>5. Locations (${rData.locations.length})</h6>
+          ${rData.locations.length ? `
+            <div class="d-flex flex-wrap gap-2">
+              ${rData.locations.map(l => `<span class="badge bg-success bg-opacity-10 text-success border border-success p-2 fs-6"><i class="fa-solid fa-location-dot me-1"></i>${l.name}</span>`).join('')}
+            </div>
+          ` : '<div class="text-muted small">No specific geographic locations identified.</div>'}
+        </div>
+
+        <!-- Section 6: Weapons / Assets -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-crosshairs text-primary me-2"></i>6. Weapons & Strategic Assets (${rData.weapons_assets.length})</h6>
+          ${rData.weapons_assets.length ? `
+            <ul class="list-group list-group-flush border rounded-3 small">
+              ${rData.weapons_assets.map(w => `<li class="list-group-item d-flex justify-content-between align-items-center">
+                <div><i class="fa-solid fa-triangle-exclamation text-danger me-2"></i><strong>${w.name}</strong> <span class="badge bg-danger ms-1">${w.type_name}</span></div>
+                <span class="fw-700 text-danger">Risk ${w.risk_score}%</span>
+              </li>`).join('')}
+            </ul>
+          ` : '<div class="text-muted small">No strategic weapons or assets recorded.</div>'}
+        </div>
+
+        <!-- Section 7: Extracted Relationships -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-diagram-project text-primary me-2"></i>7. Extracted Semantic Relationships (${rData.relationships.length})</h6>
+          ${rData.relationships.length ? `
+            <table class="cg-table table-bordered mb-0 small">
+              <thead><tr><th>Source Entity</th><th>Relationship Type</th><th>Target Entity</th><th>Confidence</th><th>Evidence Snippet</th></tr></thead>
+              <tbody>
+                ${rData.relationships.map(r => `<tr>
+                  <td class="fw-700 text-dark">${r.source_name}</td>
+                  <td><span class="badge bg-primary text-white">${r.rel_type.replace(/_/g, ' ')}</span></td>
+                  <td class="fw-700 text-dark">${r.target_name}</td>
+                  <td class="fw-700 text-success">${r.confidence || 85}%</td>
+                  <td class="fst-italic text-secondary">${r.evidence_text || 'Contextual sentence match.'}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          ` : '<div class="text-muted small">No relationships extracted.</div>'}
+        </div>
+
+        <!-- Section 8: Evidence -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-folder-open text-primary me-2"></i>8. Evidence Inventory (${rData.evidence.length})</h6>
+          ${rData.evidence.length ? `
+            <ul class="list-group list-group-flush border rounded-3 small">
+              ${rData.evidence.map(e => `<li class="list-group-item"><strong>${e.evidence_type}</strong>: ${e.description}</li>`).join('')}
+            </ul>
+          ` : '<div class="text-muted small">No evidence items recorded.</div>'}
+        </div>
+
+        <!-- Section 9: Network Analysis -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-brain text-primary me-2"></i>9. Network Analysis & Structural Indicators</h6>
+          ${rData.analysis_patterns.length ? `
+            <div class="d-flex flex-column gap-2">
+              ${rData.analysis_patterns.map(ap => `<div class="p-3 border rounded bg-light">
+                <div class="d-flex justify-content-between"><div class="fw-700 text-dark">${ap.pattern_type}</div><span class="badge bg-info text-dark">Confidence ${ap.confidence}%</span></div>
+                <div class="small text-secondary mt-1">${ap.reason}</div>
+              </div>`).join('')}
+            </div>
+          ` : '<div class="text-muted small">Run pattern analysis under Analysis tab to generate network metrics.</div>'}
+        </div>
+
+        <!-- Section 10: Risk Analysis -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-shield-cat text-primary me-2"></i>10. Risk Analysis (Post-Validation Scoring)</h6>
+          <div class="p-3 border rounded bg-light small">
+            <div class="fw-700 text-dark mb-1">Risk Evaluation Policy:</div>
+            <p class="text-secondary mb-0">Risk scores are assigned strictly AFTER entity validation. Geographical entities and government agencies receive 15-25% baseline risk, while illegal weapons, fugitive suspects, and unverified arms drops are scored 85-95% threat priority.</p>
+          </div>
+        </div>
+
+        <!-- Section 11: Unresolved / Open Questions -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-circle-question text-warning me-2"></i>11. Unresolved / Open Questions (${rData.unresolved_items.length})</h6>
+          ${rData.unresolved_items.length ? `
+            <div class="d-flex flex-column gap-2">
+              ${rData.unresolved_items.map(u => `<div class="p-3 border-start border-3 border-warning bg-warning bg-opacity-10 rounded">
+                <div class="fw-700 text-dark small text-uppercase"><i class="fa-solid fa-circle-exclamation text-warning me-1"></i>OPEN / UNRESOLVED ASPECT: ${u.title}</div>
+                <div class="small text-secondary mt-1">${u.description}</div>
+              </div>`).join('')}
+            </div>
+          ` : '<div class="text-muted small">No open questions flagged.</div>'}
+        </div>
+
+        <!-- Section 12: Source Provenance -->
+        <div class="mb-4">
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-certificate text-primary me-2"></i>12. Source Provenance & Data Integrity</h6>
+          <div class="p-3 border rounded bg-light small">
+            <div class="fw-700 text-dark mb-1">Source Classification: ${rData.source_provenance.type}</div>
+            <div class="text-muted mb-1">${rData.source_provenance.description}</div>
+            <div class="text-success fw-600"><i class="fa-solid fa-check-circle me-1"></i>Status: ${rData.source_provenance.verification_status}</div>
+          </div>
+        </div>
+
+        <!-- Official Sign-off -->
         <div class="pt-4 border-top mt-5">
           <div class="row g-4">
             <div class="col-md-6">

@@ -53,14 +53,23 @@ $viewerId       = upsertUser($pdo, ['full_name' => 'Vikram Joshi', 'username' =>
 $entityTypes = [
     ['Person', 'fa-user', '#38bdf8'],
     ['Organization', 'fa-building', '#a78bfa'],
+    ['Agency', 'fa-building-shield', '#818cf8'],
     ['Location', 'fa-location-dot', '#34d399'],
     ['Vehicle', 'fa-car', '#fbbf24'],
     ['Phone Number', 'fa-phone', '#f472b6'],
     ['Bank Account', 'fa-building-columns', '#f87171'],
+    ['Email', 'fa-envelope', '#38bdf8'],
     ['Transaction', 'fa-money-bill-transfer', '#fb923c'],
+    ['Money', 'fa-coins', '#10b981'],
+    ['Weapon', 'fa-crosshairs', '#ef4444'],
+    ['Ammunition', 'fa-cubes-stacked', '#dc2626'],
+    ['Aircraft', 'fa-plane', '#0284c7'],
+    ['Case Number', 'fa-file-signature', '#a855f7'],
+    ['Date', 'fa-clock', '#64748b'],
+    ['Document', 'fa-file-lines', '#94a3b8'],
+    ['Legal Notice', 'fa-gavel', '#eab308'],
     ['Event', 'fa-calendar-days', '#c084fc'],
     ['Social Media Account', 'fa-hashtag', '#60a5fa'],
-    ['Document', 'fa-file-lines', '#94a3b8'],
     ['Photo / Image', 'fa-image', '#38bdf8'],
     ['Video Footage', 'fa-film', '#e879f9'],
     ['Face / Suspect Tag', 'fa-user-gear', '#ef4444'],
@@ -77,7 +86,13 @@ foreach ($pdo->query('SELECT id, name FROM entity_types') as $row) $typeIds[$row
 echo "Entity types seeded.\n";
 
 // --- Relationship types ---
-$relTypes = ['ASSOCIATED_WITH', 'CALLS', 'OWNS', 'VISITED', 'WORKS_FOR', 'TRANSFERRED_MONEY_TO', 'MENTIONED_IN', 'FAMILY_OF', 'MET_WITH', 'FEATURED_IN_FRAME', 'SPOTTED_AT', 'IDENTIFIED_WITH'];
+$relTypes = [
+    'INVESTIGATED_BY', 'INVOLVED_IN', 'ALIAS_OF', 'LOCATED_IN', 'ISSUED_NOTICE_TO',
+    'SUBJECT_OF', 'RECOVERED_AT', 'DROPPED_AT', 'OWNED_BY', 'CONTACTED',
+    'TRANSFERRED_TO', 'ASSOCIATED_WITH', 'TRAVELED_TO', 'OPERATED', 'CONNECTED_TO',
+    'CALLS', 'VISITED', 'WORKS_FOR', 'TRANSFERRED_MONEY_TO', 'MENTIONED_IN',
+    'FAMILY_OF', 'MET_WITH', 'FEATURED_IN_FRAME', 'SPOTTED_AT', 'IDENTIFIED_WITH'
+];
 $stmt = $isSqlite
     ? $pdo->prepare('INSERT OR IGNORE INTO relationship_types (name) VALUES (?)')
     : $pdo->prepare('INSERT IGNORE INTO relationship_types (name) VALUES (?)');
