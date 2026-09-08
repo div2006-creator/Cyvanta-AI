@@ -121,6 +121,8 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
   <div id="cgOsintFeedList"></div>
   <div id="cgOsintEmpty" class="cg-empty-state" hidden><i class="fa-solid fa-globe"></i>No open-source intelligence feeds ingested yet. Ingest web alerts to monitor active unsolved cases in real time.</div>
 </div>
+
+<div id="tab-evidence" class="cg-tab-panel" hidden>
   <div class="d-flex justify-content-end mb-3">
     <button class="cg-btn cg-btn-primary" data-bs-toggle="modal" data-bs-target="#cgEvidenceModal"><i class="fa-solid fa-plus"></i> Add Evidence</button>
   </div>
