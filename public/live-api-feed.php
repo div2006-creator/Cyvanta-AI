@@ -224,7 +224,7 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
           </div>
           <div class="col-md-4">
             <label class="cg-label">Source URL (Required for REAL DATA)</label>
-            <input name="source_url" class="cg-form-control" placeholder="https://public-records.intelligence.org/alerts/fn-9902">
+            <input name="source_url" class="cg-form-control" placeholder="https://example-public-registry.org/feed">
           </div>
           <div class="col-md-4">
             <label class="cg-label">Severity</label>
@@ -279,7 +279,7 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
           <!-- Public Sources Tab -->
           <div class="tab-pane fade show active" id="tabPublicSources">
             <div class="alert alert-info py-2 small border-0 mb-3">
-              <i class="fa-solid fa-circle-info me-1"></i> Public records must have valid, reachable URLs. Unverified records automatically fall back to <strong>SIMULATED DATA</strong>.
+              <i class="fa-solid fa-circle-info me-1"></i> Public record feeds require real HTTP GET verification (`fetched_http_status = 200`). Records without a verified HTTP 200 payload automatically display <strong>SIMULATED DATA</strong>.
             </div>
             <div class="cg-card bg-light p-3 border mb-3">
               <div class="d-flex justify-content-between align-items-center">
@@ -291,8 +291,8 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
               </div>
               <hr class="my-2">
               <div class="row g-2 small">
-                <div class="col-md-6 text-muted">Last Fetch: <span class="fw-600 text-dark" id="cgLastPublicFetch">Just now</span></div>
-                <div class="col-md-6 text-muted">Status: <span class="fw-600 text-success">Verified &amp; Active</span></div>
+                <div class="col-md-6 text-muted">Last Verified Fetch: <span class="fw-600 text-dark" id="cgLastPublicFetch">Never</span></div>
+                <div class="col-md-6 text-muted">Verification Rule: <span class="fw-600 text-success">Strict HTTP 200 Check</span></div>
               </div>
             </div>
           </div>
@@ -300,13 +300,13 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
           <!-- Authorized Sources Tab -->
           <div class="tab-pane fade" id="tabAuthSources">
             <div class="alert alert-primary py-2 small border-0 mb-3">
-              <i class="fa-solid fa-shield-halved me-1"></i> Production gateway integration for authorized department feeds (CCTNS/ICJS). Requires department authentication credentials.
+              <i class="fa-solid fa-shield-halved me-1"></i> Authorized department gateway integration. When unconfigured, the system explicitly displays <strong>AUTHORIZED SOURCE — Not Configured</strong>.
             </div>
             <form id="cgGovConfigForm">
               <div class="row g-3">
                 <div class="col-md-8">
                   <label class="cg-label">Authorized Gateway Endpoint URL</label>
-                  <input name="endpoint" id="inputGovEndpoint" class="cg-form-control font-monospace" placeholder="https://api.icjs.gov.in/v1/dispatches">
+                  <input name="endpoint" id="inputGovEndpoint" class="cg-form-control font-monospace" placeholder="https://authorized-gateway.dept.gov/v1/dispatches">
                 </div>
                 <div class="col-md-4">
                   <label class="cg-label">Department Code</label>
@@ -344,7 +344,7 @@ $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
                   <h6 class="fw-700 m-0 text-dark">CNI Demonstration Generator</h6>
                   <div class="small text-muted">Synthetic event synthesis with automatic entity extraction</div>
                 </div>
-                <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-play me-1"></i> Simulation Engine Ready</span>
+                <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-play me-1"></i> Simulation Engine Active</span>
               </div>
             </div>
           </div>

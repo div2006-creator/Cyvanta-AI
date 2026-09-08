@@ -18,7 +18,7 @@ abstract class IngestionSource
 
 /**
  * Source Adapter: Public Record Source
- * Ingests open public alerts and news records with verified source URLs.
+ * Real public records are ONLY ingested when backend successfully verifies a legitimate HTTP 200 payload.
  */
 class PublicRecordSource extends IngestionSource
 {
@@ -39,33 +39,9 @@ class PublicRecordSource extends IngestionSource
 
     public function fetchEvents(): array
     {
-        $fetchedAt = date('Y-m-d H:i:s');
-        return [
-            [
-                'event_type' => 'FINANCIAL_NETWORK',
-                'title' => 'LIVE INTELLIGENCE: Financial Network Alert',
-                'description' => 'Public record bulletin flagging offshore shell entity transfers routing through international financial hubs.',
-                'source_type' => 'PUBLIC_RECORD',
-                'source_name' => 'Public Record Register',
-                'source_url' => 'https://public-records.intelligence.org/alerts/fn-9902',
-                'source_id' => 'SRC-PR-9902',
-                'source_fetched_at' => $fetchedAt,
-                'is_verified' => true,
-                'severity' => 'High',
-                'confidence' => 87,
-                'location' => 'New Delhi',
-                'entities' => [
-                    ['name' => 'Company Alpha', 'type' => 'Organization', 'risk' => 75],
-                    ['name' => 'Account 001', 'type' => 'Financial Account', 'risk' => 80],
-                    ['name' => 'Person A', 'type' => 'Person', 'risk' => 85]
-                ],
-                'relationships' => [
-                    ['source' => 'Person A', 'target' => 'Company Alpha', 'type' => 'DIRECTOR_OF'],
-                    ['source' => 'Company Alpha', 'target' => 'Account 001', 'type' => 'TRANSFERS_FUNDS']
-                ],
-                'raw_data' => ['registry_ref' => 'PR-2026-9902', 'status' => 'VERIFIED']
-            ]
-        ];
+        // PublicRecordSource produces events ONLY when a real URL is provided or retrieved.
+        // Unverified demonstration events are strictly delegated to SimulationSource.
+        return [];
     }
 }
 
@@ -105,6 +81,8 @@ class SimulationSource extends IngestionSource
                 'source_url' => null,
                 'source_id' => 'SIM-FN-' . $uniq,
                 'source_fetched_at' => $fetchedAt,
+                'verification_method' => 'SIMULATION',
+                'fetched_http_status' => null,
                 'is_verified' => false,
                 'severity' => 'High',
                 'confidence' => 91,
@@ -131,6 +109,8 @@ class SimulationSource extends IngestionSource
                 'source_url' => null,
                 'source_id' => 'SIM-ARMS-' . $uniq,
                 'source_fetched_at' => $fetchedAt,
+                'verification_method' => 'SIMULATION',
+                'fetched_http_status' => null,
                 'is_verified' => false,
                 'severity' => 'Critical',
                 'confidence' => 94,
@@ -155,6 +135,8 @@ class SimulationSource extends IngestionSource
                 'source_url' => null,
                 'source_id' => 'SIM-CYBER-' . $uniq,
                 'source_fetched_at' => $fetchedAt,
+                'verification_method' => 'SIMULATION',
+                'fetched_http_status' => null,
                 'is_verified' => false,
                 'severity' => 'High',
                 'confidence' => 89,
@@ -177,8 +159,8 @@ class SimulationSource extends IngestionSource
 }
 
 /**
- * Source Adapter: Authorized Government Source (CCTNS / ICJS Production Adapter)
- * Active ONLY when AUTHORIZED_SOURCE_ENABLED=true and valid API configuration exists.
+ * Source Adapter: Authorized Government Source (Production Adapter)
+ * Default: Disabled. Active ONLY when AUTHORIZED_SOURCE_ENABLED=true and a valid URL/KEY is provided.
  */
 class AuthorizedGovernmentSource extends IngestionSource
 {
@@ -189,7 +171,7 @@ class AuthorizedGovernmentSource extends IngestionSource
 
     public function getSourceName(): string
     {
-        return 'Authorized Government API (CCTNS/ICJS)';
+        return 'Authorized Government API Gateway';
     }
 
     public function isAvailable(): bool
@@ -218,10 +200,11 @@ class AuthorizedGovernmentSource extends IngestionSource
         ]);
 
         $response = curl_exec($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
         curl_close($ch);
 
-        if ($err || !$response) {
+        if ($err || $httpStatus !== 200 || !$response) {
             return [];
         }
 
@@ -234,13 +217,15 @@ class AuthorizedGovernmentSource extends IngestionSource
         foreach ($decoded['events'] as $evt) {
             $events[] = [
                 'event_type' => $evt['event_type'] ?? 'ORGANIZED_CRIME',
-                'title' => 'LIVE INTELLIGENCE: ' . ($evt['title'] ?? 'Official Department Dispatch'),
-                'description' => $evt['description'] ?? 'Official authorized dispatch received.',
+                'title' => 'LIVE INTELLIGENCE: ' . ($evt['title'] ?? 'Authorized Department Alert'),
+                'description' => $evt['description'] ?? 'Authorized dispatch received.',
                 'source_type' => 'AUTHORIZED_API',
-                'source_name' => 'Authorized CCTNS/ICJS Gateway',
+                'source_name' => 'Authorized Government Gateway',
                 'source_url' => $apiUrl,
                 'source_id' => $evt['source_id'] ?? ('AUTH-' . uniqid()),
                 'source_fetched_at' => $fetchedAt,
+                'verification_method' => 'AUTHORIZED_API_RESPONSE',
+                'fetched_http_status' => 200,
                 'is_verified' => true,
                 'severity' => $evt['severity'] ?? 'High',
                 'confidence' => (int) ($evt['confidence'] ?? 95),
@@ -280,7 +265,7 @@ class IntelligenceService
     }
 
     /**
-     * Ingest a single validated intelligence event
+     * Ingest a single validated intelligence event with strict backend verification
      */
     public function ingestEvent(array $data, ?int $userId = null): array
     {
@@ -300,16 +285,44 @@ class IntelligenceService
             throw new InvalidArgumentException('Event title and description are required.');
         }
 
-        // Enforce Source Provenance & Verification Rules
+        $verificationMethod = 'SIMULATION';
+        $fetchedHttpStatus = null;
+        $isVerified = 0;
+
+        // STRICT SOURCE PROVENANCE VERIFICATION AUDIT RULES
         if ($sourceType === 'PUBLIC_RECORD') {
-            // Must have a valid URL to be verified REAL DATA
             if (empty($sourceUrl) || filter_var($sourceUrl, FILTER_VALIDATE_URL) === false) {
+                // No valid URL provided -> Force SIMULATION
                 $sourceType = 'SIMULATION';
                 $sourceName = 'CNI Demonstration Generator';
                 $sourceUrl = null;
                 $isVerified = 0;
+                $verificationMethod = 'SIMULATION';
+                $fetchedHttpStatus = null;
             } else {
-                $isVerified = isset($data['is_verified']) && $data['is_verified'] ? 1 : 1;
+                // Real HTTP Verification Check
+                $ch = curl_init($sourceUrl);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 4,
+                    CURLOPT_NOBODY => false,
+                    CURLOPT_USERAGENT => 'CNI-Source-Verification/1.0'
+                ]);
+                $resp = curl_exec($ch);
+                $fetchedHttpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($fetchedHttpStatus === 200 && !empty($resp)) {
+                    $isVerified = 1;
+                    $verificationMethod = 'SOURCE_FETCH';
+                } else {
+                    // Fetch failed or non-200 -> Force SIMULATION
+                    $sourceType = 'SIMULATION';
+                    $sourceName = 'CNI Demonstration Generator';
+                    $sourceUrl = null;
+                    $isVerified = 0;
+                    $verificationMethod = 'SIMULATION';
+                }
             }
         } elseif ($sourceType === 'AUTHORIZED_API') {
             $isAuthorizedAvailable = AUTHORIZED_SOURCE_ENABLED && !empty(AUTHORIZED_SOURCE_API_URL);
@@ -318,8 +331,12 @@ class IntelligenceService
                 $sourceName = 'CNI Demonstration Generator';
                 $sourceUrl = null;
                 $isVerified = 0;
+                $verificationMethod = 'SIMULATION';
+                $fetchedHttpStatus = null;
             } else {
                 $isVerified = 1;
+                $verificationMethod = 'AUTHORIZED_API_RESPONSE';
+                $fetchedHttpStatus = $data['fetched_http_status'] ?? 200;
             }
         } else {
             // SIMULATION
@@ -327,6 +344,8 @@ class IntelligenceService
             $sourceName = 'CNI Demonstration Generator';
             $sourceUrl = null;
             $isVerified = 0;
+            $verificationMethod = 'SIMULATION';
+            $fetchedHttpStatus = null;
         }
 
         // Duplicate Check (same title within last 1 hour)
@@ -350,10 +369,11 @@ class IntelligenceService
         // Insert into intelligence_events
         $stmt = $this->pdo->prepare("
             INSERT INTO intelligence_events (
-                event_type, title, description, source_type, source_name, source_url, source_id, source_fetched_at, is_verified,
+                event_type, title, description, source_type, source_name, source_url, source_id, source_fetched_at,
+                verification_method, fetched_http_status, is_verified,
                 severity, confidence, location, entities, relationships, raw_data,
                 processing_status, event_timestamp, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processed', NOW(), NOW(), NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processed', NOW(), NOW(), NOW())
         ");
         $stmt->execute([
             $eventType,
@@ -364,6 +384,8 @@ class IntelligenceService
             $sourceUrl,
             $sourceId,
             $sourceFetchedAt,
+            $verificationMethod,
+            $fetchedHttpStatus,
             $isVerified,
             $severity,
             $confidence,
@@ -414,6 +436,8 @@ class IntelligenceService
             'source_url' => $sourceUrl,
             'source_id' => $sourceId,
             'source_fetched_at' => $sourceFetchedAt,
+            'verification_method' => $verificationMethod,
+            'fetched_http_status' => $fetchedHttpStatus,
             'is_verified' => (bool) $isVerified,
             'severity' => $severity,
             'entities_count' => count($entities),
@@ -615,6 +639,8 @@ class IntelligenceService
             $r['relationships'] = json_decode($r['relationships'] ?? '[]', true);
             $r['raw_data'] = json_decode($r['raw_data'] ?? '{}', true);
             $r['is_verified'] = (bool) ($r['is_verified'] ?? 0);
+            $r['verification_method'] = $r['verification_method'] ?? 'SIMULATION';
+            $r['fetched_http_status'] = $r['fetched_http_status'] !== null ? (int) $r['fetched_http_status'] : null;
         }
 
         return [
@@ -640,6 +666,8 @@ class IntelligenceService
         $r['relationships'] = json_decode($r['relationships'] ?? '[]', true);
         $r['raw_data'] = json_decode($r['raw_data'] ?? '{}', true);
         $r['is_verified'] = (bool) ($r['is_verified'] ?? 0);
+        $r['verification_method'] = $r['verification_method'] ?? 'SIMULATION';
+        $r['fetched_http_status'] = $r['fetched_http_status'] !== null ? (int) $r['fetched_http_status'] : null;
 
         // Fetch master case graph node if exists
         $caseStmt = $this->pdo->prepare("SELECT id FROM cases WHERE case_number = 'CASE-INTEL-LIVE'");
@@ -664,8 +692,8 @@ class IntelligenceService
         $highRiskAlerts = (int) $this->pdo->query("SELECT COUNT(*) FROM intelligence_events WHERE severity IN ('High', 'Critical')")->fetchColumn();
 
         // Sources status breakdown
-        $lastPrFetch = $this->pdo->query("SELECT MAX(source_fetched_at) FROM intelligence_events WHERE source_type = 'PUBLIC_RECORD'")->fetchColumn();
-        $lastAuthFetch = $this->pdo->query("SELECT MAX(source_fetched_at) FROM intelligence_events WHERE source_type = 'AUTHORIZED_API'")->fetchColumn();
+        $lastPrFetch = $this->pdo->query("SELECT MAX(source_fetched_at) FROM intelligence_events WHERE source_type = 'PUBLIC_RECORD' AND is_verified = 1")->fetchColumn();
+        $lastAuthFetch = $this->pdo->query("SELECT MAX(source_fetched_at) FROM intelligence_events WHERE source_type = 'AUTHORIZED_API' AND is_verified = 1")->fetchColumn();
         $lastSimFetch = $this->pdo->query("SELECT MAX(source_fetched_at) FROM intelligence_events WHERE source_type = 'SIMULATION'")->fetchColumn();
 
         $sourcesStatus = [
@@ -674,15 +702,15 @@ class IntelligenceService
                 'name' => 'Public Record Register',
                 'available' => true,
                 'last_fetch' => $lastPrFetch ?: 'Never',
-                'status' => 'Active — Verifiable URL Required'
+                'status' => 'Active — Real HTTP 200 Fetch & Valid URL Required'
             ],
             [
                 'type' => 'AUTHORIZED_API',
-                'name' => 'Authorized Government API (CCTNS/ICJS)',
+                'name' => 'Authorized Government Gateway',
                 'available' => AUTHORIZED_SOURCE_ENABLED && !empty(AUTHORIZED_SOURCE_API_URL),
-                'endpoint' => !empty(AUTHORIZED_SOURCE_API_URL) ? preg_replace('/(?<=:\/\/)[^@]+@/', '***@', AUTHORIZED_SOURCE_API_URL) : 'Not configured',
+                'endpoint' => !empty(AUTHORIZED_SOURCE_API_URL) ? preg_replace('/(?<=:\/\/)[^@]+@/', '***@', AUTHORIZED_SOURCE_API_URL) : 'Not Configured',
                 'last_fetch' => $lastAuthFetch ?: 'Never',
-                'status' => AUTHORIZED_SOURCE_ENABLED ? 'Connected & Active' : 'Disabled (Requires Department Gateway)'
+                'status' => AUTHORIZED_SOURCE_ENABLED ? 'Connected & Active' : 'Not Configured (Requires Authorized Gateway)'
             ],
             [
                 'type' => 'SIMULATION',

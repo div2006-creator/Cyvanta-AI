@@ -27,6 +27,16 @@
         if (pr && document.getElementById('cgLastPublicFetch')) {
           document.getElementById('cgLastPublicFetch').textContent = pr.last_fetch;
         }
+
+        const auth = sources.find(s => s.type === 'AUTHORIZED_API');
+        const elEn = document.getElementById('inputGovEnabled');
+        if (elEn && auth) {
+          elEn.checked = !!auth.available;
+        }
+        const elEp = document.getElementById('inputGovEndpoint');
+        if (elEp && auth && auth.endpoint !== 'Not Configured') {
+          elEp.value = auth.endpoint || '';
+        }
       }
     } catch (e) {
       console.error('Error loading intelligence status:', e);
@@ -85,21 +95,30 @@
           <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1"><i class="fa-solid fa-check-circle me-1"></i> REAL DATA</span>
           <div class="small fw-700 text-dark mt-1">Public Record</div>
           <div class="small text-muted">Source: ${e.source_name || 'Public Register'}</div>
-          <div class="small text-success fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003;</div>
+          <div class="small text-success fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003; (HTTP ${e.fetched_http_status || 200})</div>
           <a href="${e.source_url}" target="_blank" class="small text-primary fw-600 d-inline-block mt-1" onclick="event.stopPropagation()">View Source &rarr;</a>
         </div>
       `;
     }
 
-    if (st === 'AUTHORIZED_API' && isVerified) {
-      return `
-        <div>
-          <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1"><i class="fa-solid fa-shield-halved me-1"></i> AUTHORIZED SOURCE</span>
-          <div class="small fw-700 text-dark mt-1">${e.source_name || 'Government API'}</div>
-          <div class="small text-primary fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003;</div>
-          ${e.source_url ? `<a href="${e.source_url}" target="_blank" class="small text-primary fw-600 d-inline-block mt-1" onclick="event.stopPropagation()">View Source &rarr;</a>` : ''}
-        </div>
-      `;
+    if (st === 'AUTHORIZED_API') {
+      if (isVerified) {
+        return `
+          <div>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1"><i class="fa-solid fa-shield-halved me-1"></i> AUTHORIZED SOURCE</span>
+            <div class="small fw-700 text-dark mt-1">${e.source_name || 'Department Gateway'}</div>
+            <div class="small text-primary fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003;</div>
+            ${e.source_url ? `<a href="${e.source_url}" target="_blank" class="small text-primary fw-600 d-inline-block mt-1" onclick="event.stopPropagation()">View Source &rarr;</a>` : ''}
+          </div>
+        `;
+      } else {
+        return `
+          <div>
+            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary px-2 py-1"><i class="fa-solid fa-lock me-1"></i> AUTHORIZED SOURCE — Not Configured</span>
+            <div class="small text-muted mt-1">Unconfigured Department Gateway</div>
+          </div>
+        `;
+      }
     }
 
     // Default to SIMULATION / Unverified
@@ -181,13 +200,17 @@
 
       if (st === 'PUBLIC_RECORD' && isVerified && e.source_url) {
         sourceBanner = `<div class="alert alert-success border-success d-flex align-items-center justify-content-between py-2 mb-3 fw-700 small">
-          <div><i class="fa-solid fa-circle-check fs-5 me-2"></i> REAL DATA — LEGITIMATE PUBLIC SOURCE VERIFIED</div>
+          <div><i class="fa-solid fa-circle-check fs-5 me-2"></i> REAL DATA — LEGITIMATE PUBLIC SOURCE VERIFIED (HTTP ${e.fetched_http_status || 200})</div>
           <a href="${e.source_url}" target="_blank" class="btn btn-sm btn-success text-white font-monospace">View Source &rarr;</a>
         </div>`;
       } else if (st === 'AUTHORIZED_API' && isVerified) {
         sourceBanner = `<div class="alert alert-primary border-primary d-flex align-items-center justify-content-between py-2 mb-3 fw-700 small">
           <div><i class="fa-solid fa-shield-halved fs-5 me-2"></i> AUTHORIZED GOVERNMENT SOURCE DISPATCH</div>
           ${e.source_url ? `<a href="${e.source_url}" target="_blank" class="btn btn-sm btn-primary text-white font-monospace">View Gateway &rarr;</a>` : ''}
+        </div>`;
+      } else if (st === 'AUTHORIZED_API' && !isVerified) {
+        sourceBanner = `<div class="alert alert-secondary border-secondary d-flex align-items-center py-2 mb-3 fw-700 small">
+          <i class="fa-solid fa-lock fs-5 me-2"></i> AUTHORIZED SOURCE — NOT CONFIGURED
         </div>`;
       } else {
         sourceBanner = `<div class="alert alert-warning border-warning d-flex align-items-center gap-2 py-2 mb-3 fw-700 small">
@@ -210,12 +233,12 @@
             <div class="fw-700 text-dark">${e.source_type}</div>
           </div>
           <div class="col-md-3">
-            <div class="small text-muted text-uppercase fw-700">Severity &amp; Confidence</div>
-            <div><span class="cg-priority ${getSeverityClass(e.severity)}">${e.severity}</span> <span class="fw-700 font-monospace text-primary ms-1">${e.confidence}%</span></div>
+            <div class="small text-muted text-uppercase fw-700">Verification Method</div>
+            <div class="fw-600 font-monospace text-dark">${e.verification_method || 'SIMULATION'}</div>
           </div>
           <div class="col-md-3">
-            <div class="small text-muted text-uppercase fw-700">Verification</div>
-            <div>${isVerified ? '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> Verified: &#10003;</span>' : '<span class="badge bg-warning text-dark"><i class="fa-solid fa-flask me-1"></i> Simulated</span>'}</div>
+            <div class="small text-muted text-uppercase fw-700">HTTP Fetch Status</div>
+            <div class="fw-600 font-monospace ${e.fetched_http_status === 200 ? 'text-success' : 'text-muted'}">${e.fetched_http_status ? e.fetched_http_status + ' OK' : 'N/A'}</div>
           </div>
           <div class="col-md-6">
             <div class="small text-muted text-uppercase fw-700">Source Name &amp; ID</div>
@@ -223,7 +246,7 @@
           </div>
           <div class="col-md-6">
             <div class="small text-muted text-uppercase fw-700">Source URL</div>
-            <div class="text-truncate">${e.source_url ? `<a href="${e.source_url}" target="_blank" class="text-primary fw-600">${e.source_url}</a>` : '<span class="text-muted font-monospace">N/A (Synthetic)</span>'}</div>
+            <div class="text-truncate">${e.source_url ? `<a href="${e.source_url}" target="_blank" class="text-primary fw-600">${e.source_url}</a>` : '<span class="text-muted font-monospace">N/A (Synthetic / None)</span>'}</div>
           </div>
           <div class="col-md-4">
             <div class="small text-muted text-uppercase fw-700">Fetched Timestamp</div>
@@ -234,8 +257,8 @@
             <div class="small text-dark font-monospace">${new Date(e.event_timestamp).toLocaleString()}</div>
           </div>
           <div class="col-md-4">
-            <div class="small text-muted text-uppercase fw-700">Location</div>
-            <div class="fw-600 text-dark"><i class="fa-solid fa-location-dot me-1 text-danger"></i>${e.location || 'Unspecified'}</div>
+            <div class="small text-muted text-uppercase fw-700">Severity &amp; Confidence</div>
+            <div><span class="cg-priority ${getSeverityClass(e.severity)}">${e.severity}</span> <span class="fw-700 font-monospace text-primary ms-1">${e.confidence}%</span></div>
           </div>
         </div>
 

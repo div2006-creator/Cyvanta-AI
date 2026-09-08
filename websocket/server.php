@@ -184,6 +184,8 @@ while (true) {
                     'source_url' => $row['source_url'],
                     'source_id' => $row['source_id'] ?? null,
                     'source_fetched_at' => $row['source_fetched_at'] ?? null,
+                    'verification_method' => $row['verification_method'] ?? 'SIMULATION',
+                    'fetched_http_status' => $row['fetched_http_status'] !== null ? (int) $row['fetched_http_status'] : null,
                     'is_verified' => (bool) ($row['is_verified'] ?? 0),
                     'severity' => $row['severity'],
                     'confidence' => (int) $row['confidence'],

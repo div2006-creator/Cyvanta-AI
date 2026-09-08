@@ -303,6 +303,8 @@ CREATE TABLE intelligence_events (
     source_url VARCHAR(255) DEFAULT NULL,
     source_id VARCHAR(100) DEFAULT NULL,
     source_fetched_at DATETIME DEFAULT NULL,
+    verification_method VARCHAR(50) NOT NULL DEFAULT 'SIMULATION',
+    fetched_http_status INT DEFAULT NULL,
     is_verified TINYINT(1) NOT NULL DEFAULT 0,
     severity VARCHAR(30) NOT NULL DEFAULT 'Medium',
     confidence INT NOT NULL DEFAULT 80,

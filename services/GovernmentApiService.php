@@ -30,12 +30,12 @@ class GovernmentApiService
         }
 
         return [
-            'enabled' => filter_var($settings['gov_api_enabled'] ?? 'true', FILTER_VALIDATE_BOOLEAN),
-            'endpoint' => $settings['gov_api_endpoint'] ?? 'https://cctns.ncrb.gov.in/api/v2/live-firs',
-            'department' => $settings['gov_api_department'] ?? 'Crime Investigation Department (CID)',
-            'api_key' => $settings['gov_api_key'] ?? 'CCTNS-LIVE-KEY-8849-2026',
+            'enabled' => filter_var($settings['gov_api_enabled'] ?? 'false', FILTER_VALIDATE_BOOLEAN),
+            'endpoint' => $settings['gov_api_endpoint'] ?? '',
+            'department' => $settings['gov_api_department'] ?? 'Department Intelligence Cell',
+            'api_key' => $settings['gov_api_key'] ?? '',
             'sync_interval_mins' => (int) ($settings['gov_api_interval'] ?? 15),
-            'last_sync' => $settings['gov_api_last_sync'] ?? date('Y-m-d H:i:s', strtotime('-10 minutes')),
+            'last_sync' => $settings['gov_api_last_sync'] ?? 'Never',
             'total_ingested' => (int) ($settings['gov_api_total_ingested'] ?? 0)
         ];
     }

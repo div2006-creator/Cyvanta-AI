@@ -254,6 +254,8 @@ CREATE TABLE IF NOT EXISTS intelligence_events (
     source_url TEXT DEFAULT NULL,
     source_id TEXT DEFAULT NULL,
     source_fetched_at DATETIME DEFAULT NULL,
+    verification_method TEXT NOT NULL DEFAULT 'SIMULATION',
+    fetched_http_status INTEGER DEFAULT NULL,
     is_verified INTEGER NOT NULL DEFAULT 0,
     severity TEXT NOT NULL DEFAULT 'Medium',
     confidence INTEGER NOT NULL DEFAULT 80,
