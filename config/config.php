@@ -60,6 +60,11 @@ define('WEBSOCKET_PORT', (int) env('WEBSOCKET_PORT', 8081));
 define('AI_SERVICE_URL', env('AI_SERVICE_URL', ''));
 define('AI_SERVICE_ENABLED', filter_var(env('AI_SERVICE_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN));
 
+define('AUTHORIZED_SOURCE_ENABLED', filter_var(env('AUTHORIZED_SOURCE_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN));
+define('AUTHORIZED_SOURCE_API_URL', env('AUTHORIZED_SOURCE_API_URL', ''));
+define('AUTHORIZED_SOURCE_API_KEY', env('AUTHORIZED_SOURCE_API_KEY', ''));
+define('SIMULATION_ENABLED', filter_var(env('SIMULATION_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN));
+
 define('UPLOAD_DIR', APP_ROOT . '/storage/uploads');
 define('UPLOAD_MAX_SIZE', ((int) env('UPLOAD_MAX_SIZE_MB', 50)) * 1024 * 1024);
 define('ALLOWED_UPLOAD_EXTENSIONS', ['pdf', 'doc', 'docx', 'txt', 'csv', 'jpg', 'jpeg', 'png', 'webp', 'tiff', 'bmp', 'mp4', 'avi', 'mov', 'mkv', 'webm']);

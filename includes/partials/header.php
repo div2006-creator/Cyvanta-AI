@@ -37,7 +37,7 @@ $base = cg_base_url();
       <a href="<?= $base ?>/documents.php" class="<?= $activeNav === 'documents' ? 'active' : '' ?>"><i class="fa-solid fa-file-shield"></i> Documents</a>
       <a href="<?= $base ?>/analysis.php" class="<?= $activeNav === 'analysis' ? 'active' : '' ?>"><i class="fa-solid fa-brain"></i> AI Analysis</a>
       <a href="<?= $base ?>/alerts.php" class="<?= $activeNav === 'alerts' ? 'active' : '' ?>"><i class="fa-solid fa-bell"></i> Alerts</a>
-      <a href="<?= $base ?>/live-api-feed.php" class="<?= $activeNav === 'live-api' ? 'active' : '' ?>"><i class="fa-solid fa-cloud-arrow-down"></i> Live Gov Feed</a>
+      <a href="<?= $base ?>/live-api-feed.php" class="<?= $activeNav === 'live-api' ? 'active' : '' ?>"><i class="fa-solid fa-satellite-dish"></i> Live Intelligence Feed</a>
       <?php if (in_array($user['role'], ['super_admin', 'administrator'], true)): ?>
       <div class="cg-nav-divider">Administration</div>
       <a href="<?= $base ?>/admin/index.php" class="<?= $activeNav === 'admin' ? 'active' : '' ?>"><i class="fa-solid fa-shield-halved"></i> Admin Panel</a>

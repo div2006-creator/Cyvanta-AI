@@ -17,11 +17,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Trigger sync
-    $res = $service->syncLiveGovernmentFeed($user['id']);
+    $intelService = new IntelligenceService($pdo);
+    $res = $intelService->pollSources($user['id']);
     cg_json_success(
         $res['ingested_count'] > 0 
-            ? "Successfully ingested {$res['ingested_count']} new live case(s) from Government CCTNS API Feed." 
-            : "Government API sync completed. All live dispatches are already up to date.",
+            ? "Successfully ingested {$res['ingested_count']} new intelligence alert(s)." 
+            : "Intelligence sync completed. All feeds are up to date.",
         $res
     );
 }

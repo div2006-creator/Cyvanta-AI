@@ -15,6 +15,7 @@ require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/../services/AnalysisService.php';
 require_once __DIR__ . '/../services/DocumentProcessingService.php';
 require_once __DIR__ . '/../services/GovernmentApiService.php';
+require_once __DIR__ . '/../services/IntelligenceService.php';
 
 cg_session_start();
 if ($__cg_is_api) {

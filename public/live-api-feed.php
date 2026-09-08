@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 cg_require_login();
 
-$pageTitle = 'Live Government API Ingestion Feed';
+$pageTitle = 'Live Intelligence Ingestion System';
 $activeNav = 'live-api';
 $pageScripts = ['live-api-feed.js'];
 require __DIR__ . '/../includes/partials/header.php';
@@ -10,108 +10,261 @@ $user = cg_current_user();
 $isAdmin = in_array($user['role'], ['super_admin', 'administrator'], true);
 ?>
 
+<!-- Header & Top Actions -->
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <div>
-    <h4 class="fw-800 m-0"><i class="fa-solid fa-cloud-arrow-down text-primary me-2"></i>Live Government API Ingestion Feed</h4>
-    <div class="small text-muted">Real-time crime intelligence ingestion from CCTNS, ICJS, NCRB, and Interpol dispatches</div>
+    <h4 class="fw-800 m-0"><i class="fa-solid fa-satellite-dish text-primary me-2"></i>Live Intelligence Ingestion System</h4>
+    <div class="small text-muted">Real-time multi-source intelligence ingestion, entity extraction, and criminal network synthesis</div>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-700 d-flex align-items-center gap-2" id="cgWsConnectionBadge">
+      <span class="spinner-grow spinner-grow-sm text-success" role="status"></span> ● CONNECTED
+    </span>
+    <button class="cg-btn cg-btn-outline" id="cgToggleSimBtn"><i class="fa-solid fa-play me-1 text-warning"></i> Start Simulation</button>
+    <button class="cg-btn cg-btn-outline" data-bs-toggle="modal" data-bs-target="#cgIngestEventModal"><i class="fa-solid fa-plus me-1"></i> Ingest Event</button>
     <?php if ($isAdmin): ?>
-    <button class="cg-btn cg-btn-outline" data-bs-toggle="modal" data-bs-target="#cgGovConfigModal"><i class="fa-solid fa-sliders"></i> API Settings</button>
+    <button class="cg-btn cg-btn-outline" data-bs-toggle="modal" data-bs-target="#cgGovConfigModal"><i class="fa-solid fa-sliders"></i> Source Settings</button>
     <?php endif; ?>
-    <button class="cg-btn cg-btn-primary" id="cgTriggerGovSyncBtn"><i class="fa-solid fa-arrows-rotate"></i> Sync Live Feed Now</button>
   </div>
 </div>
 
-<!-- Connection Status Card -->
-<div class="cg-card mb-4 bg-white">
-  <div class="row g-3 align-items-center">
-    <div class="col-md-3">
-      <div class="d-flex align-items-center gap-3">
-        <div class="cg-metric-icon bg-success bg-opacity-10 text-success fs-4 border-success">
-          <i class="fa-solid fa-server"></i>
-        </div>
-        <div>
-          <div class="small text-muted text-uppercase fw-700">API Status</div>
-          <div class="fw-800 text-success d-flex align-items-center gap-2" id="cgGovApiStatusBadge">
-            <span class="spinner-grow spinner-grow-sm text-success" role="status"></span> Connected & Active
-          </div>
-        </div>
-      </div>
+<!-- Dashboard Metrics Row -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
+    <div class="cg-card p-3 text-center bg-white">
+      <div class="small text-muted text-uppercase fw-700">Live Events</div>
+      <div class="fs-4 fw-800 text-primary font-monospace" id="cgMetricLiveEvents">0</div>
     </div>
-    <div class="col-md-3">
-      <div class="small text-muted text-uppercase fw-700">Configured API Endpoint</div>
-      <div class="fw-600 text-dark font-monospace small text-truncate" id="cgGovApiEndpoint">https://cctns.ncrb.gov.in/api/v2/live-firs</div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="cg-card p-3 text-center bg-white">
+      <div class="small text-muted text-uppercase fw-700">Active Networks</div>
+      <div class="fs-4 fw-800 text-info font-monospace" id="cgMetricActiveNetworks">0</div>
     </div>
-    <div class="col-md-3">
-      <div class="small text-muted text-uppercase fw-700">Last Sync Timestamp</div>
-      <div class="fw-600 text-dark" id="cgGovApiLastSync">—</div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="cg-card p-3 text-center bg-white">
+      <div class="small text-muted text-uppercase fw-700">Entities Identified</div>
+      <div class="fs-4 fw-800 text-dark font-monospace" id="cgMetricEntitiesIdentified">0</div>
     </div>
-    <div class="col-md-3">
-      <div class="small text-muted text-uppercase fw-700">Total Cases Ingested</div>
-      <div class="fw-800 text-primary fs-5 font-monospace" id="cgGovApiTotalIngested">0</div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="cg-card p-3 text-center bg-white">
+      <div class="small text-muted text-uppercase fw-700">Relationships Discovered</div>
+      <div class="fs-4 fw-800 text-secondary font-monospace" id="cgMetricRelsDiscovered">0</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-2">
+    <div class="cg-card p-3 text-center bg-white">
+      <div class="small text-muted text-uppercase fw-700">High-Risk Alerts</div>
+      <div class="fs-4 fw-800 text-danger font-monospace" id="cgMetricHighRisk">0</div>
     </div>
   </div>
 </div>
 
-<!-- Ingested Live Cases Table -->
+<!-- Filter Controls Bar -->
+<div class="cg-card mb-4 bg-white p-3">
+  <form id="cgIntelFilterForm" class="row g-2 align-items-end">
+    <div class="col-md-2">
+      <label class="cg-label small mb-1">Source Type</label>
+      <select name="source_type" class="cg-form-control form-select-sm">
+        <option value="">All Sources</option>
+        <option value="PUBLIC_RECORD">Public Record</option>
+        <option value="AUTHORIZED_API">Authorized API</option>
+        <option value="SIMULATION">Simulation</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="cg-label small mb-1">Severity</label>
+      <select name="severity" class="cg-form-control form-select-sm">
+        <option value="">All Severities</option>
+        <option value="Critical">Critical</option>
+        <option value="High">High</option>
+        <option value="Medium">Medium</option>
+        <option value="Low">Low</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="cg-label small mb-1">Event Type</label>
+      <select name="event_type" class="cg-form-control form-select-sm">
+        <option value="">All Network Types</option>
+        <option value="FINANCIAL_NETWORK">Financial Network</option>
+        <option value="ARMS_NETWORK">Arms Network</option>
+        <option value="DRUG_NETWORK">Narcotics Network</option>
+        <option value="CYBER_NETWORK">Cyber Network</option>
+        <option value="ORGANIZED_CRIME">Organized Crime</option>
+        <option value="HUMAN_TRAFFICKING">Human Trafficking</option>
+        <option value="COMMUNICATION_NETWORK">Communication Cluster</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="cg-label small mb-1">Location Search</label>
+      <input type="text" name="location" class="cg-form-control form-control-sm" placeholder="e.g. Delhi, Mumbai, Uttar Pradesh">
+    </div>
+    <div class="col-md-2 d-flex gap-1">
+      <button type="submit" class="cg-btn cg-btn-primary cg-btn-sm w-100"><i class="fa-solid fa-filter me-1"></i> Filter</button>
+      <button type="button" id="cgResetFiltersBtn" class="cg-btn cg-btn-outline cg-btn-sm"><i class="fa-solid fa-undo"></i></button>
+    </div>
+  </form>
+</div>
+
+<!-- Live Intelligence Feed Table -->
 <div class="cg-card p-0 overflow-hidden">
   <div class="p-3 border-bottom bg-light d-flex justify-content-between align-items-center">
-    <h6 class="fw-700 m-0 text-dark"><i class="fa-solid fa-list-check me-2 text-primary"></i>Live Ingested Crime Dispatches</h6>
-    <span class="badge bg-primary text-white" id="cgLiveCasesCount">0 Live Cases</span>
+    <h6 class="fw-700 m-0 text-dark"><i class="fa-solid fa-stream me-2 text-primary"></i>Live Intelligence Feed</h6>
+    <div class="d-flex align-items-center gap-2">
+      <span class="small text-muted" id="cgLastUpdateText">Updated just now</span>
+      <button id="cgManualPollBtn" class="cg-btn cg-btn-outline cg-btn-sm"><i class="fa-solid fa-arrows-rotate me-1"></i> Poll Now</button>
+    </div>
   </div>
   <div class="table-responsive">
     <table class="cg-table mb-0">
       <thead>
         <tr>
-          <th>Case Ref</th>
-          <th>Title & Details</th>
-          <th>Category</th>
+          <th>Timestamp</th>
+          <th>Source & Provenance</th>
+          <th>Event Title & Network Type</th>
           <th>Location</th>
-          <th>Priority</th>
-          <th>Status</th>
-          <th>Ingested Time</th>
+          <th>Severity</th>
+          <th>Confidence</th>
           <th>Action</th>
         </tr>
       </thead>
-      <tbody id="cgGovCasesTableBody">
-        <tr><td colspan="8" class="text-center py-4 text-muted">Loading live government feed…</td></tr>
+      <tbody id="cgIntelFeedTableBody">
+        <tr><td colspan="7" class="text-center py-4 text-muted">Loading live intelligence feed…</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- API Config Modal -->
+<!-- Event Detail Modal -->
+<div class="modal fade" id="cgEventDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content" style="background:var(--cg-panel);border:1px solid var(--cg-border-soft);color:var(--cg-text)">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-700" id="cgModalEventTitle">Intelligence Event Details</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="cgModalEventBody">
+        <!-- Injected by JS -->
+      </div>
+      <div class="modal-footer border-0">
+        <a id="cgModalInspectGraphLink" href="#" class="cg-btn cg-btn-primary"><i class="fa-solid fa-diagram-project me-1"></i> Open in Network Graph</a>
+        <button class="cg-btn cg-btn-outline" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Event Ingest Modal -->
+<div class="modal fade" id="cgIngestEventModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content" style="background:var(--cg-panel);border:1px solid var(--cg-border-soft);color:var(--cg-text)">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-700"><i class="fa-solid fa-plus me-2 text-primary"></i>Ingest New Intelligence Event</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="cgManualIngestForm">
+        <div class="modal-body row g-3">
+          <div class="col-md-8">
+            <label class="cg-label">Event Title</label>
+            <input required name="title" class="cg-form-control" placeholder="e.g. LIVE INTELLIGENCE: Financial Network Alert">
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Network Type</label>
+            <select name="event_type" class="cg-form-control">
+              <option value="FINANCIAL_NETWORK">Financial Network</option>
+              <option value="ARMS_NETWORK">Arms Network</option>
+              <option value="DRUG_NETWORK">Narcotics Network</option>
+              <option value="CYBER_NETWORK">Cyber Network</option>
+              <option value="ORGANIZED_CRIME">Organized Crime</option>
+              <option value="HUMAN_TRAFFICKING">Human Trafficking</option>
+              <option value="COMMUNICATION_NETWORK">Communication Cluster</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="cg-label">Description & Telemetry Narrative</label>
+            <textarea required name="description" class="cg-form-control" rows="3" placeholder="Provide event summary narrative..."></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Source Type</label>
+            <select name="source_type" class="cg-form-control">
+              <option value="PUBLIC_RECORD">PUBLIC_RECORD</option>
+              <option value="AUTHORIZED_API">AUTHORIZED_API</option>
+              <option value="SIMULATION">SIMULATION</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Source Name</label>
+            <input required name="source_name" class="cg-form-control" value="Public Record Register">
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Source URL (Optional)</label>
+            <input name="source_url" class="cg-form-control" placeholder="https://...">
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Severity</label>
+            <select name="severity" class="cg-form-control">
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Confidence Score (1-100)</label>
+            <input type="number" min="1" max="100" name="confidence" class="cg-form-control" value="85">
+          </div>
+          <div class="col-md-4">
+            <label class="cg-label">Location</label>
+            <input name="location" class="cg-form-control" value="New Delhi">
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="cg-btn cg-btn-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="cg-btn cg-btn-primary"><i class="fa-solid fa-paper-plane me-1"></i> Submit Ingest</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Source Settings Modal -->
 <?php if ($isAdmin): ?>
 <div class="modal fade" id="cgGovConfigModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content" style="background:var(--cg-panel);border:1px solid var(--cg-border-soft);color:var(--cg-text)">
       <div class="modal-header border-0">
-        <h5 class="modal-title fw-700"><i class="fa-solid fa-sliders me-2 text-primary"></i>Government API Connection Settings</h5>
+        <h5 class="modal-title fw-700"><i class="fa-solid fa-sliders me-2 text-primary"></i>Authorized Government Source Settings</h5>
         <button class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form id="cgGovConfigForm">
         <div class="modal-body row g-3">
+          <div class="col-12">
+            <div class="alert alert-info py-2 small border-0">
+              <i class="fa-solid fa-shield-halved me-1"></i> Authorized integration for government sources (CCTNS/ICJS) requires department credentials and secure gateway URL.
+            </div>
+          </div>
           <div class="col-md-8">
-            <label class="cg-label">API Endpoint URL</label>
-            <input required name="endpoint" id="inputGovEndpoint" class="cg-form-control font-monospace" value="https://cctns.ncrb.gov.in/api/v2/live-firs">
+            <label class="cg-label">Authorized Endpoint URL</label>
+            <input name="endpoint" id="inputGovEndpoint" class="cg-form-control font-monospace" placeholder="https://api.icjs.gov.in/v1/dispatches">
           </div>
           <div class="col-md-4">
             <label class="cg-label">Department Code</label>
-            <input required name="department" id="inputGovDept" class="cg-form-control" value="Crime Investigation Department (CID)">
+            <input name="department" id="inputGovDept" class="cg-form-control" placeholder="CID-INTEL-DIV">
           </div>
           <div class="col-md-8">
-            <label class="cg-label">Government Authentication Key / OAuth Bearer Token</label>
-            <input required name="api_key" id="inputGovApiKey" class="cg-form-control font-monospace" value="CCTNS-LIVE-KEY-8849-2026">
+            <label class="cg-label">OAuth Bearer Token / Department API Key</label>
+            <input name="api_key" id="inputGovApiKey" class="cg-form-control font-monospace" placeholder="SECRET-DEPT-TOKEN">
           </div>
           <div class="col-md-4">
-            <label class="cg-label">Auto-Sync Interval (Minutes)</label>
-            <input required type="number" min="1" max="1440" name="sync_interval_mins" id="inputGovInterval" class="cg-form-control" value="15">
+            <label class="cg-label">Poll Interval (Mins)</label>
+            <input type="number" min="1" max="1440" name="sync_interval_mins" id="inputGovInterval" class="cg-form-control" value="15">
           </div>
           <div class="col-12">
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="enabled" id="inputGovEnabled" checked>
-              <label class="form-check-label fw-600 text-dark" for="inputGovEnabled">Enable Live Automatic API Polling</label>
+              <input class="form-check-input" type="checkbox" name="enabled" id="inputGovEnabled">
+              <label class="form-check-label fw-600 text-dark" for="inputGovEnabled">Enable Authorized Government Ingestion</label>
             </div>
           </div>
         </div>

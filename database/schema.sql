@@ -292,4 +292,30 @@ CREATE TABLE system_settings (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+DROP TABLE IF EXISTS intelligence_events;
+CREATE TABLE intelligence_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_type VARCHAR(60) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    source_type VARCHAR(50) NOT NULL DEFAULT 'SIMULATION',
+    source_name VARCHAR(100) NOT NULL,
+    source_url VARCHAR(255) DEFAULT NULL,
+    severity VARCHAR(30) NOT NULL DEFAULT 'Medium',
+    confidence INT NOT NULL DEFAULT 80,
+    location VARCHAR(200) DEFAULT NULL,
+    entities JSON DEFAULT NULL,
+    relationships JSON DEFAULT NULL,
+    raw_data JSON DEFAULT NULL,
+    processing_status VARCHAR(40) NOT NULL DEFAULT 'processed',
+    event_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_intel_timestamp (event_timestamp),
+    INDEX idx_intel_type (event_type),
+    INDEX idx_intel_severity (severity),
+    INDEX idx_intel_source (source_type),
+    INDEX idx_intel_location (location)
+) ENGINE=InnoDB;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -43,12 +43,14 @@ $pending = [];
 
 $lastActivityId = 0;
 $lastNotificationId = 0;
+$lastIntelligenceId = 0;
 try {
     $pdo = Database::connect();
     $lastActivityId = (int) $pdo->query('SELECT COALESCE(MAX(id),0) FROM system_activity')->fetchColumn();
     $lastNotificationId = (int) $pdo->query('SELECT COALESCE(MAX(id),0) FROM notifications')->fetchColumn();
+    $lastIntelligenceId = (int) $pdo->query('SELECT COALESCE(MAX(id),0) FROM intelligence_events')->fetchColumn();
 } catch (Throwable $e) {
-    fwrite(STDERR, "Warning: could not read initial activity cursor — {$e->getMessage()}\n");
+    fwrite(STDERR, "Warning: could not read initial cursors — {$e->getMessage()}\n");
 }
 
 function ws_handshake($request): ?string
@@ -166,6 +168,27 @@ while (true) {
             foreach ($stmt->fetchAll() as $row) {
                 $lastNotificationId = (int) $row['id'];
                 broadcast($clients, 'NOTIFICATION_CREATED', ['title' => $row['title'], 'message' => $row['message']]);
+            }
+
+            $stmt = $pdo->prepare('SELECT * FROM intelligence_events WHERE id > ? ORDER BY id ASC');
+            $stmt->execute([$lastIntelligenceId]);
+            foreach ($stmt->fetchAll() as $row) {
+                $lastIntelligenceId = (int) $row['id'];
+                broadcast($clients, 'INTELLIGENCE_EVENT_CREATED', [
+                    'id' => (int) $row['id'],
+                    'title' => $row['title'],
+                    'description' => $row['description'],
+                    'event_type' => $row['event_type'],
+                    'source_type' => $row['source_type'],
+                    'source_name' => $row['source_name'],
+                    'source_url' => $row['source_url'],
+                    'severity' => $row['severity'],
+                    'confidence' => (int) $row['confidence'],
+                    'location' => $row['location'],
+                    'entities' => json_decode($row['entities'] ?? '[]', true),
+                    'relationships' => json_decode($row['relationships'] ?? '[]', true),
+                    'event_timestamp' => $row['event_timestamp']
+                ]);
             }
         } catch (Throwable $e) {
             fwrite(STDERR, 'Polling error: ' . $e->getMessage() . "\n");

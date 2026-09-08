@@ -243,3 +243,30 @@ CREATE TABLE IF NOT EXISTS system_settings (
     setting_value TEXT DEFAULT NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS intelligence_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'SIMULATION',
+    source_name TEXT NOT NULL,
+    source_url TEXT DEFAULT NULL,
+    severity TEXT NOT NULL DEFAULT 'Medium',
+    confidence INTEGER NOT NULL DEFAULT 80,
+    location TEXT DEFAULT NULL,
+    entities TEXT DEFAULT NULL,
+    relationships TEXT DEFAULT NULL,
+    raw_data TEXT DEFAULT NULL,
+    processing_status TEXT NOT NULL DEFAULT 'processed',
+    event_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_intel_timestamp ON intelligence_events(event_timestamp);
+CREATE INDEX IF NOT EXISTS idx_intel_type ON intelligence_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_intel_severity ON intelligence_events(severity);
+CREATE INDEX IF NOT EXISTS idx_intel_source ON intelligence_events(source_type);
+CREATE INDEX IF NOT EXISTS idx_intel_location ON intelligence_events(location);
+
