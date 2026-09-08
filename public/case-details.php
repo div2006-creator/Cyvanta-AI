@@ -49,7 +49,6 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
   <div class="cg-tab" data-tab="network">Network</div>
   <div class="cg-tab" data-tab="entities">Entities</div>
   <div class="cg-tab" data-tab="documents">Documents</div>
-  <div class="cg-tab" data-tab="osint"><i class="fa-solid fa-globe me-1 text-info"></i> Live OSINT</div>
   <div class="cg-tab" data-tab="evidence">Evidence</div>
   <div class="cg-tab" data-tab="timeline">Timeline</div>
   <div class="cg-tab" data-tab="analysis">Analysis</div>
@@ -59,11 +58,10 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
 </div>
 
 <div id="tab-overview" class="cg-tab-panel">
-  <div id="cgCrossCaseAlerts" class="mb-3"></div>
   <div class="row g-3">
     <div class="col-lg-8">
       <div class="cg-card">
-        <h6 class="fw-700 mb-2">Case Description & Agency Reference</h6>
+        <h6 class="fw-700 mb-2">Case Description</h6>
         <p class="text-muted mb-3"><?= nl2br(htmlspecialchars($case['description'] ?: 'No description provided.')) ?></p>
         <div class="row g-3 small">
           <div class="col-6"><div class="text-muted">Category</div><div class="text-white fw-600"><?= htmlspecialchars($case['category'] ?: '—') ?></div></div>
@@ -111,15 +109,6 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
   </div>
   <div id="cgDocumentsList"></div>
   <div id="cgDocumentsEmpty" class="cg-empty-state" hidden><i class="fa-solid fa-file-shield"></i>No documents uploaded yet.</div>
-</div>
-
-<div id="tab-osint" class="cg-tab-panel" hidden>
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div class="small text-muted"><i class="fa-solid fa-satellite-dish text-info me-1"></i> Live Open-Source Intelligence & Public Alert Feed</div>
-    <button class="cg-btn cg-btn-primary" data-bs-toggle="modal" data-bs-target="#cgOsintModal"><i class="fa-solid fa-plus me-1"></i> Ingest OSINT Update</button>
-  </div>
-  <div id="cgOsintFeedList"></div>
-  <div id="cgOsintEmpty" class="cg-empty-state" hidden><i class="fa-solid fa-globe"></i>No open-source intelligence feeds ingested yet. Ingest web alerts to monitor active unsolved cases in real time.</div>
 </div>
 
 <div id="tab-evidence" class="cg-tab-panel" hidden>
@@ -249,28 +238,6 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
         <div class="modal-footer border-0">
           <button type="button" class="cg-btn cg-btn-outline" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="cg-btn cg-btn-primary"><i class="fa-solid fa-check me-1"></i> Save Assignment</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Ingest OSINT Modal -->
-<div class="modal fade" id="cgOsintModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content" style="background:var(--cg-panel);border:1px solid var(--cg-border-soft);color:var(--cg-text)">
-      <div class="modal-header border-0"><h5 class="modal-title fw-700"><i class="fa-solid fa-globe me-2 text-info"></i>Ingest Live OSINT Web Intelligence Feed</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-      <form id="cgOsintForm">
-        <div class="modal-body row g-3">
-          <div class="col-md-6"><label class="cg-label">Intelligence Source / News Agency</label><input required name="source_name" class="cg-form-control" placeholder="e.g. National Crime Intelligence Bureau"></div>
-          <div class="col-md-6"><label class="cg-label">Article / Report URL</label><input name="url" class="cg-form-control" placeholder="https://..."></div>
-          <div class="col-12"><label class="cg-label">Intelligence Headline / Title</label><input required name="title" class="cg-form-control" placeholder="e.g. Smuggling Logistics Operations Flagged in Andheri"></div>
-          <div class="col-12"><label class="cg-label">Full Article / Intelligence Text</label><textarea required name="content" rows="4" class="cg-form-control" placeholder="Paste news report, alert text, or intelligence update..."></textarea></div>
-          <div class="col-12"><div class="small text-muted"><i class="fa-solid fa-circle-info me-1"></i>Ingesting an OSINT feed automatically extracts entities and triggers cross-case suspect linking.</div></div>
-        </div>
-        <div class="modal-footer border-0">
-          <button type="button" class="cg-btn cg-btn-outline" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="cg-btn cg-btn-primary"><i class="fa-solid fa-brain me-1"></i> Ingest & Run AI Extraction</button>
         </div>
       </form>
     </div>
