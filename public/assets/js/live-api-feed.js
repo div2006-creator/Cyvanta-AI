@@ -1,6 +1,7 @@
 (function () {
   let activeFilters = {};
   let isSimActive = false;
+  let isWsConnected = false;
 
   async function loadDashboardStatus() {
     try {
@@ -17,7 +18,14 @@
         updateSimBtnUI();
 
         if (st.last_event_timestamp) {
-          document.getElementById('cgLastUpdateText').textContent = 'Last update: ' + new Date(st.last_event_timestamp).toLocaleTimeString();
+          document.getElementById('cgLastSyncTimeLabel').textContent = 'Last sync: ' + new Date(st.last_event_timestamp).toLocaleTimeString();
+        }
+
+        // Update settings modal info if available
+        const sources = st.sources || [];
+        const pr = sources.find(s => s.type === 'PUBLIC_RECORD');
+        if (pr && document.getElementById('cgLastPublicFetch')) {
+          document.getElementById('cgLastPublicFetch').textContent = pr.last_fetch;
         }
       }
     } catch (e) {
@@ -27,25 +35,81 @@
 
   function updateSimBtnUI() {
     const btn = document.getElementById('cgToggleSimBtn');
-    if (!btn) return;
-    if (isSimActive) {
-      btn.className = 'cg-btn cg-btn-outline border-danger text-danger';
-      btn.innerHTML = '<i class="fa-solid fa-pause me-1"></i> Stop Simulation';
-    } else {
-      btn.className = 'cg-btn cg-btn-outline';
-      btn.innerHTML = '<i class="fa-solid fa-play me-1 text-warning"></i> Start Simulation';
+    const simBadge = document.getElementById('cgSimStatusBadge');
+
+    if (btn) {
+      if (isSimActive) {
+        btn.className = 'cg-btn cg-btn-outline border-danger text-danger';
+        btn.innerHTML = '<i class="fa-solid fa-pause me-1"></i> Stop Simulation';
+      } else {
+        btn.className = 'cg-btn cg-btn-outline';
+        btn.innerHTML = '<i class="fa-solid fa-play me-1 text-warning"></i> Start Simulation';
+      }
+    }
+
+    if (simBadge) {
+      simBadge.style.display = isSimActive ? 'inline-flex' : 'none';
     }
   }
 
-  function getSourceBadge(sourceType, sourceName) {
-    const type = (sourceType || 'SIMULATION').toUpperCase();
-    if (type === 'PUBLIC_RECORD') {
-      return `<span class="badge bg-info bg-opacity-10 text-info border border-info px-2 py-1"><i class="fa-solid fa-globe me-1"></i> REAL DATA (${sourceName || 'PUBLIC RECORD'})</span>`;
+  function updateTransportUI(connected) {
+    isWsConnected = connected;
+    const wsBadge = document.getElementById('cgWsConnectionBadge');
+    const wsStateLabel = document.getElementById('cgWsStateLabel');
+    const pollStateLabel = document.getElementById('cgPollStateLabel');
+
+    if (connected) {
+      if (wsBadge) {
+        wsBadge.className = 'badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-700 d-flex align-items-center gap-2';
+        wsBadge.innerHTML = '<span class="spinner-grow spinner-grow-sm text-success" role="status"></span> LIVE — WEBSOCKET CONNECTED';
+      }
+      if (wsStateLabel) { wsStateLabel.className = 'fw-700 text-success'; wsStateLabel.textContent = 'Connected'; }
+      if (pollStateLabel) { pollStateLabel.className = 'fw-700 text-muted'; pollStateLabel.textContent = 'Disabled'; }
+    } else {
+      if (wsBadge) {
+        wsBadge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2 fw-700 d-flex align-items-center gap-2';
+        wsBadge.innerHTML = '<i class="fa-solid fa-plug-circle-xmark me-1"></i> OFFLINE — RECONNECTING';
+      }
+      if (wsStateLabel) { wsStateLabel.className = 'fw-700 text-danger'; wsStateLabel.textContent = 'Disconnected'; }
+      if (pollStateLabel) { pollStateLabel.className = 'fw-700 text-warning'; pollStateLabel.textContent = 'Active (Fallback)'; }
     }
-    if (type === 'AUTHORIZED_API') {
-      return `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1"><i class="fa-solid fa-shield-halved me-1"></i> AUTHORIZED SOURCE</span>`;
+  }
+
+  function renderProvenanceCell(e) {
+    const st = (e.source_type || 'SIMULATION').toUpperCase();
+    const isVerified = !!e.is_verified;
+
+    if (st === 'PUBLIC_RECORD' && isVerified && e.source_url) {
+      return `
+        <div>
+          <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1"><i class="fa-solid fa-check-circle me-1"></i> REAL DATA</span>
+          <div class="small fw-700 text-dark mt-1">Public Record</div>
+          <div class="small text-muted">Source: ${e.source_name || 'Public Register'}</div>
+          <div class="small text-success fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003;</div>
+          <a href="${e.source_url}" target="_blank" class="small text-primary fw-600 d-inline-block mt-1" onclick="event.stopPropagation()">View Source &rarr;</a>
+        </div>
+      `;
     }
-    return `<span class="badge bg-warning bg-opacity-10 text-dark border border-warning px-2 py-1"><i class="fa-solid fa-flask me-1"></i> SIMULATED DATA</span>`;
+
+    if (st === 'AUTHORIZED_API' && isVerified) {
+      return `
+        <div>
+          <span class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1"><i class="fa-solid fa-shield-halved me-1"></i> AUTHORIZED SOURCE</span>
+          <div class="small fw-700 text-dark mt-1">${e.source_name || 'Government API'}</div>
+          <div class="small text-primary fw-600"><i class="fa-solid fa-circle-check me-1"></i> Verified: &#10003;</div>
+          ${e.source_url ? `<a href="${e.source_url}" target="_blank" class="small text-primary fw-600 d-inline-block mt-1" onclick="event.stopPropagation()">View Source &rarr;</a>` : ''}
+        </div>
+      `;
+    }
+
+    // Default to SIMULATION / Unverified
+    return `
+      <div>
+        <span class="badge bg-warning bg-opacity-10 text-dark border border-warning px-2 py-1"><i class="fa-solid fa-flask me-1"></i> SIMULATED DATA</span>
+        <div class="small fw-700 text-dark mt-1">CNI Demonstration Generator</div>
+        <div class="small text-muted">Synthetic Event</div>
+      </div>
+    `;
   }
 
   function getSeverityClass(sev) {
@@ -70,7 +134,7 @@
         tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
           <i class="fa-solid fa-satellite-dish fs-3 d-block mb-2 text-secondary"></i>
           No intelligence events found matching your criteria.<br>
-          Click <strong>Start Simulation</strong> or <strong>Poll Now</strong> to ingest live intelligence.
+          Click <strong>Start Simulation</strong> or <strong>SYNC NOW</strong> to ingest live intelligence.
         </td></tr>`;
         return;
       }
@@ -78,7 +142,7 @@
       tbody.innerHTML = events.map(e => `
         <tr onclick="window.cgShowEventDetail(${e.id})" style="cursor:pointer" id="cgIntelRow-${e.id}">
           <td class="small text-muted font-monospace">${new Date(e.event_timestamp).toLocaleString()}</td>
-          <td>${getSourceBadge(e.source_type, e.source_name)}</td>
+          <td>${renderProvenanceCell(e)}</td>
           <td>
             <div class="fw-700 text-dark">${e.title}</div>
             <div class="small text-muted text-truncate" style="max-width:340px">${e.description || ''}</div>
@@ -113,17 +177,21 @@
 
       let sourceBanner = '';
       const st = (e.source_type || 'SIMULATION').toUpperCase();
-      if (st === 'SIMULATION') {
-        sourceBanner = `<div class="alert alert-warning border-warning d-flex align-items-center gap-2 py-2 mb-3 fw-700 small">
-          <i class="fa-solid fa-triangle-exclamation fs-5"></i> SIMULATED DATA — FOR DEMONSTRATION ONLY
+      const isVerified = !!e.is_verified;
+
+      if (st === 'PUBLIC_RECORD' && isVerified && e.source_url) {
+        sourceBanner = `<div class="alert alert-success border-success d-flex align-items-center justify-content-between py-2 mb-3 fw-700 small">
+          <div><i class="fa-solid fa-circle-check fs-5 me-2"></i> REAL DATA — LEGITIMATE PUBLIC SOURCE VERIFIED</div>
+          <a href="${e.source_url}" target="_blank" class="btn btn-sm btn-success text-white font-monospace">View Source &rarr;</a>
         </div>`;
-      } else if (st === 'PUBLIC_RECORD') {
-        sourceBanner = `<div class="alert alert-info border-info d-flex align-items-center gap-2 py-2 mb-3 fw-700 small">
-          <i class="fa-solid fa-globe fs-5"></i> PUBLICLY AVAILABLE SOURCE DATA
+      } else if (st === 'AUTHORIZED_API' && isVerified) {
+        sourceBanner = `<div class="alert alert-primary border-primary d-flex align-items-center justify-content-between py-2 mb-3 fw-700 small">
+          <div><i class="fa-solid fa-shield-halved fs-5 me-2"></i> AUTHORIZED GOVERNMENT SOURCE DISPATCH</div>
+          ${e.source_url ? `<a href="${e.source_url}" target="_blank" class="btn btn-sm btn-primary text-white font-monospace">View Gateway &rarr;</a>` : ''}
         </div>`;
       } else {
-        sourceBanner = `<div class="alert alert-primary border-primary d-flex align-items-center gap-2 py-2 mb-3 fw-700 small">
-          <i class="fa-solid fa-shield-halved fs-5"></i> AUTHORIZED GOVERNMENT SOURCE DATA
+        sourceBanner = `<div class="alert alert-warning border-warning d-flex align-items-center gap-2 py-2 mb-3 fw-700 small">
+          <i class="fa-solid fa-flask fs-5"></i> SIMULATED DATA — FOR DEMONSTRATION ONLY
         </div>`;
       }
 
@@ -133,31 +201,47 @@
       modalBody.innerHTML = `
         ${sourceBanner}
         <div class="row g-3 mb-3">
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="small text-muted text-uppercase fw-700">Network Type</div>
             <div class="fw-700 text-primary">${e.event_type}</div>
           </div>
-          <div class="col-md-4">
-            <div class="small text-muted text-uppercase fw-700">Severity & Confidence</div>
+          <div class="col-md-3">
+            <div class="small text-muted text-uppercase fw-700">Source Type</div>
+            <div class="fw-700 text-dark">${e.source_type}</div>
+          </div>
+          <div class="col-md-3">
+            <div class="small text-muted text-uppercase fw-700">Severity &amp; Confidence</div>
             <div><span class="cg-priority ${getSeverityClass(e.severity)}">${e.severity}</span> <span class="fw-700 font-monospace text-primary ms-1">${e.confidence}%</span></div>
+          </div>
+          <div class="col-md-3">
+            <div class="small text-muted text-uppercase fw-700">Verification</div>
+            <div>${isVerified ? '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> Verified: &#10003;</span>' : '<span class="badge bg-warning text-dark"><i class="fa-solid fa-flask me-1"></i> Simulated</span>'}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="small text-muted text-uppercase fw-700">Source Name &amp; ID</div>
+            <div class="fw-600 text-dark">${e.source_name} <span class="font-monospace text-muted small">(${e.source_id || 'SIM-GEN'})</span></div>
+          </div>
+          <div class="col-md-6">
+            <div class="small text-muted text-uppercase fw-700">Source URL</div>
+            <div class="text-truncate">${e.source_url ? `<a href="${e.source_url}" target="_blank" class="text-primary fw-600">${e.source_url}</a>` : '<span class="text-muted font-monospace">N/A (Synthetic)</span>'}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="small text-muted text-uppercase fw-700">Fetched Timestamp</div>
+            <div class="small text-dark font-monospace">${e.source_fetched_at ? new Date(e.source_fetched_at).toLocaleString() : 'N/A'}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="small text-muted text-uppercase fw-700">Event Timestamp</div>
+            <div class="small text-dark font-monospace">${new Date(e.event_timestamp).toLocaleString()}</div>
           </div>
           <div class="col-md-4">
             <div class="small text-muted text-uppercase fw-700">Location</div>
             <div class="fw-600 text-dark"><i class="fa-solid fa-location-dot me-1 text-danger"></i>${e.location || 'Unspecified'}</div>
           </div>
-          <div class="col-md-6">
-            <div class="small text-muted text-uppercase fw-700">Source Name</div>
-            <div class="fw-600 text-dark">${e.source_name}</div>
-          </div>
-          <div class="col-md-6">
-            <div class="small text-muted text-uppercase fw-700">Source URL</div>
-            <div class="text-truncate">${e.source_url ? `<a href="${e.source_url}" target="_blank" class="text-primary">${e.source_url}</a>` : 'N/A'}</div>
-          </div>
         </div>
 
         <div class="mb-3">
-          <div class="small text-muted text-uppercase fw-700 mb-1">Event Narrative</div>
-          <div class="p-3 bg-light rounded border text-dark">${e.description}</div>
+          <div class="small text-muted text-uppercase fw-700 mb-1">Event Telemetry Narrative</div>
+          <div class="p-3 bg-light rounded border text-dark font-monospace small">${e.description}</div>
         </div>
 
         <div class="row g-3">
@@ -211,6 +295,7 @@
         e.preventDefault();
         const data = new FormData(filterForm);
         activeFilters = Object.fromEntries(data.entries());
+        activeFilters.verified_only = filterForm.querySelector('[name=verified_only]').checked ? 1 : '';
         loadFeed();
       });
     }
@@ -246,11 +331,13 @@
       });
     }
 
-    // Manual Poll Button
-    const pollBtn = document.getElementById('cgManualPollBtn');
-    if (pollBtn) {
-      pollBtn.addEventListener('click', async function () {
+    // SYNC NOW Button
+    const syncBtn = document.getElementById('cgManualSyncBtn');
+    if (syncBtn) {
+      syncBtn.addEventListener('click', async function () {
         this.disabled = true;
+        const originalHtml = this.innerHTML;
+        this.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Syncing…';
         try {
           const res = await cgApi('/api/government/sync.php', { method: 'POST' });
           if (res.success) {
@@ -258,9 +345,10 @@
             await loadFeed();
           }
         } catch (e) {
-          cgToast('Error polling intelligence.', 'error');
+          cgToast('Error syncing intelligence.', 'error');
         } finally {
           this.disabled = false;
+          this.innerHTML = originalHtml;
         }
       });
     }
@@ -288,6 +376,30 @@
         }
       });
     }
+
+    // Save Source Settings Form
+    const cfgForm = document.getElementById('cgGovConfigForm');
+    if (cfgForm) {
+      cfgForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const payload = Object.fromEntries(new FormData(cfgForm).entries());
+        payload.action = 'update_config';
+        payload.enabled = cfgForm.querySelector('[name=enabled]').checked;
+
+        const res = await cgApi('/api/government/sync.php', { method: 'POST', body: JSON.stringify(payload) });
+        if (res.success) {
+          cgToast(res.message, 'success');
+          const modalEl = document.getElementById('cgGovConfigModal');
+          if (modalEl && window.bootstrap) bootstrap.Modal.getInstance(modalEl)?.hide();
+          loadFeed();
+        } else {
+          cgToast(res.message || 'Failed to update settings.', 'error');
+        }
+      });
+    }
+
+    // Initialize WebSocket Transport Indicators
+    updateTransportUI(true);
 
     // Listen for Real-Time WebSocket Events
     if (window.CG && window.CG.ws) {

@@ -301,6 +301,9 @@ CREATE TABLE intelligence_events (
     source_type VARCHAR(50) NOT NULL DEFAULT 'SIMULATION',
     source_name VARCHAR(100) NOT NULL,
     source_url VARCHAR(255) DEFAULT NULL,
+    source_id VARCHAR(100) DEFAULT NULL,
+    source_fetched_at DATETIME DEFAULT NULL,
+    is_verified TINYINT(1) NOT NULL DEFAULT 0,
     severity VARCHAR(30) NOT NULL DEFAULT 'Medium',
     confidence INT NOT NULL DEFAULT 80,
     location VARCHAR(200) DEFAULT NULL,
@@ -315,7 +318,8 @@ CREATE TABLE intelligence_events (
     INDEX idx_intel_type (event_type),
     INDEX idx_intel_severity (severity),
     INDEX idx_intel_source (source_type),
-    INDEX idx_intel_location (location)
+    INDEX idx_intel_location (location),
+    INDEX idx_intel_verified (is_verified)
 ) ENGINE=InnoDB;
 
 SET FOREIGN_KEY_CHECKS = 1;

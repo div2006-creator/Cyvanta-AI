@@ -24,7 +24,10 @@ $filters = [
     'event_type' => $_GET['event_type'] ?? null,
     'source_type' => $_GET['source_type'] ?? null,
     'location' => $_GET['location'] ?? null,
-    'date' => $_GET['date'] ?? null
+    'date' => $_GET['date'] ?? null,
+    'date_from' => $_GET['date_from'] ?? null,
+    'date_to' => $_GET['date_to'] ?? null,
+    'verified_only' => !empty($_GET['verified_only']) ? 1 : null
 ];
 
 $res = $service->getEvents($filters, $page, $limit);
