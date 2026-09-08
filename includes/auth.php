@@ -35,6 +35,9 @@ function cg_base_url(string $path = ''): string
     if (str_ends_with($scriptDir, '/admin')) {
         $scriptDir = substr($scriptDir, 0, -strlen('/admin'));
     }
+    if (str_ends_with($scriptDir, '/public')) {
+        $scriptDir = substr($scriptDir, 0, -strlen('/public'));
+    }
     // Normalize the web-root case to an empty string. Without this, callers
     // that do `$base . '/assets/css/style.css'` would produce "//assets/..."
     // when $scriptDir is "/" — and a leading "//" makes browsers treat the

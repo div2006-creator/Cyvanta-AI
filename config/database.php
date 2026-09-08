@@ -43,31 +43,40 @@ class Database
         }
 
         // SQLite mode / fallback
-        $dbPath = APP_ROOT . '/database/crimegraph.sqlite';
+        $dbDir = APP_ROOT . '/database';
+        if (!is_dir($dbDir)) {
+            @mkdir($dbDir, 0777, true);
+        }
+        $dbPath = $dbDir . '/crimegraph.sqlite';
         $needsInit = !file_exists($dbPath) || filesize($dbPath) === 0;
 
-        self::$instance = new PDO(
-            'sqlite:' . $dbPath,
-            null,
-            null,
-            [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ]
-        );
-        self::$instance->exec('PRAGMA foreign_keys = ON;');
-        self::$instance->sqliteCreateFunction('NOW', function() {
-            return date('Y-m-d H:i:s');
-        });
+        try {
+            self::$instance = new PDO(
+                'sqlite:' . $dbPath,
+                null,
+                null,
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ]
+            );
+            self::$instance->exec('PRAGMA foreign_keys = ON;');
+            self::$instance->sqliteCreateFunction('NOW', function() {
+                return date('Y-m-d H:i:s');
+            });
 
-        if ($needsInit) {
-            $sqlFile = APP_ROOT . '/database/sqlite_schema.sql';
-            if (file_exists($sqlFile)) {
-                self::$instance->exec(file_get_contents($sqlFile));
+            if ($needsInit) {
+                $sqlFile = APP_ROOT . '/database/sqlite_schema.sql';
+                if (file_exists($sqlFile)) {
+                    self::$instance->exec(file_get_contents($sqlFile));
+                }
             }
-        }
 
-        return self::$instance;
+            return self::$instance;
+        } catch (PDOException $e) {
+            error_log('[CYVANTA] SQLite connection error: ' . $e->getMessage());
+            throw new Exception('Database connection failed. On Hostinger, ensure the `database/` folder is writable (chmod 777 database). Error: ' . $e->getMessage());
+        }
     }
 }
