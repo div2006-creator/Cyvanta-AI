@@ -1,6 +1,9 @@
 <?php
 require_once dirname(__DIR__, 3) . '/includes/bootstrap.php';
-cg_require_login();
+if (!cg_is_logged_in()) {
+    http_response_code(401);
+    die('Unauthorized file access.');
+}
 
 try {
     $documentId = (int)($_GET['id'] ?? 0);
@@ -46,9 +49,15 @@ try {
     }
 
     $size = filesize($filePath);
+
+    while (ob_get_level()) {
+        @ob_end_clean();
+    }
+
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . $size);
     header('Accept-Ranges: bytes');
+    header('Cache-Control: public, max-age=86400');
     header('Content-Disposition: inline; filename="' . basename($doc['original_filename']) . '"');
     
     readfile($filePath);

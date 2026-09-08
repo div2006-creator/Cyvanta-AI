@@ -304,10 +304,10 @@
           <div id="mediaPreview-${d.id}" class="mt-3 p-3 border rounded" style="background:var(--cg-bg-alt,#0b132b);border-color:var(--cg-border-soft,#1e293b)!important" hidden>
             <div class="fw-700 text-info small mb-2"><i class="fa-solid ${isVideo ? 'fa-film' : 'fa-camera'} me-1"></i> ${isVideo ? 'Video Surveillance Player & Keyframe Analysis' : 'Photo Viewer & OCR Extracted Features'}</div>
             ${isVideo ? `
-              <video src="/api/documents/file.php?id=${d.id}" controls style="width:100%;max-height:360px;border-radius:8px;background:#000" preload="metadata"></video>
+              <video src="${CG.baseUrl}/api/documents/file.php?id=${d.id}" controls style="width:100%;max-height:360px;border-radius:8px;background:#000" preload="metadata"></video>
             ` : `
               <div class="text-center bg-black p-2 rounded mb-2">
-                <img src="/api/documents/file.php?id=${d.id}" style="max-width:100%;max-height:360px;border-radius:6px;object-fit:contain" alt="${d.name}">
+                <img src="${CG.baseUrl}/api/documents/file.php?id=${d.id}" style="max-width:100%;max-height:360px;border-radius:6px;object-fit:contain" alt="${d.name}">
               </div>
             `}
           </div>
