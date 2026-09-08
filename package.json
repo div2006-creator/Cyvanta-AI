@@ -1,0 +1,18 @@
+{
+  "name": "cyvanta-desktop",
+  "version": "1.0.0",
+  "description": "CYVANTA - AI-Powered Criminal Network Analysis Desktop Application",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "serve": "php -d upload_max_filesize=100M -d post_max_size=100M -S 127.0.0.1:8000 -t public"
+  },
+  "keywords": [
+    "cyvanta",
+    "intelligence",
+    "desktop-app",
+    "network-analysis"
+  ],
+  "author": "CYVANTA",
+  "license": "ISC"
+}

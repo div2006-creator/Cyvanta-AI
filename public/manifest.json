@@ -1,0 +1,16 @@
+{
+  "short_name": "CYVANTA",
+  "name": "CYVANTA - AI Criminal Network Analysis Platform",
+  "icons": [
+    {
+      "src": "/assets/images/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/dashboard.php",
+  "background_color": "#0b132b",
+  "theme_color": "#0284c7",
+  "display": "standalone",
+  "orientation": "any"
+}
