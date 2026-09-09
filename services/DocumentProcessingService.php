@@ -109,18 +109,131 @@ class DocumentProcessingService
         }
 
         if ($ext === 'pdf') {
-            $command = 'pdftotext -layout ' . escapeshellarg($path) . ' -';
-            $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-            $process = @proc_open($command, $descriptor, $pipes);
-            if (!is_resource($process)) throw new RuntimeException('PDF text extraction is unavailable on this server. Install pdftotext or use TXT/CSV/DOCX.');
-            $text = stream_get_contents($pipes[1]);
-            fclose($pipes[1]); fclose($pipes[2]);
-            $exit = proc_close($process);
-            if ($exit !== 0 || trim($text) === '') throw new RuntimeException('Unable to extract readable text from this PDF.');
-            return $text;
+            return $this->extractPdfIntelligence($document, $path);
         }
 
         throw new RuntimeException('Supported processing formats are TXT, CSV, DOCX, PDF, Photos (JPG, PNG, WEBP) and Videos (MP4, AVI, MOV).');
+    }
+
+    private function extractPdfIntelligence(array $document, string $path): string
+    {
+        // Tier 1: Attempt CLI pdftotext if available
+        if (function_exists('proc_open')) {
+            $command = 'pdftotext -layout ' . escapeshellarg($path) . ' -';
+            $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+            $process = @proc_open($command, $descriptor, $pipes);
+            if (is_resource($process)) {
+                $text = stream_get_contents($pipes[1]);
+                fclose($pipes[1]); fclose($pipes[2]);
+                $exit = proc_close($process);
+                if ($exit === 0 && trim((string)$text) !== '') {
+                    return (string)$text;
+                }
+            }
+        }
+
+        // Tier 2: Pure PHP PDF Stream Decompressor & Text Decoder
+        $purePhpText = $this->extractPdfTextPurePhp($path);
+        if (strlen(trim($purePhpText)) >= 30) {
+            return $purePhpText;
+        }
+
+        // Tier 3: Structured Metadata & Raw PDF Token Extractor (Scanned / Image PDF Fallback)
+        $raw = @file_get_contents($path);
+        $lines = [];
+        $lines[] = "CASE DOCUMENT INTELLIGENCE - PDF REPORT: " . ($document['name'] ?? 'PDF Document');
+        $lines[] = "Original Filename: " . ($document['original_filename'] ?? 'document.pdf');
+        $lines[] = "File Format: PDF Document (Portable Document Format)";
+        $lines[] = "File Size: " . round(filesize($path) / 1024, 2) . " KB";
+        if (!empty($document['description'])) $lines[] = "Case Description: " . $document['description'];
+        if (!empty($document['source'])) $lines[] = "Evidence Source: " . $document['source'];
+
+        if ($raw) {
+            preg_match_all('/[A-Za-z0-9\s.,\-\/():_]{5,}/', $raw, $matches);
+            if (!empty($matches[0])) {
+                $cleanTokens = [];
+                foreach ($matches[0] as $token) {
+                    $t = trim($token);
+                    if (strlen($t) >= 5 && !preg_match('/^(obj|endobj|stream|endstream|FlateDecode|Catalog|Pages|Parent|Kids|Type|Font|Encoding|Length)/i', $t)) {
+                        $cleanTokens[] = $t;
+                    }
+                }
+                if (!empty($cleanTokens)) {
+                    $lines[] = "Extracted PDF Context Tokens: " . implode(' ', array_slice($cleanTokens, 0, 120));
+                }
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function extractPdfTextPurePhp(string $pdfPath): string
+    {
+        $content = @file_get_contents($pdfPath);
+        if (!$content) return '';
+
+        $text = '';
+        preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $content, $streamMatches);
+        $streams = $streamMatches[1] ?? [];
+
+        foreach ($streams as $rawStream) {
+            $decompressed = '';
+            if (function_exists('gzuncompress')) {
+                $uncompressed = @gzuncompress($rawStream);
+                if ($uncompressed !== false) $decompressed = $uncompressed;
+            }
+            if ($decompressed === '' && function_exists('zlib_decode')) {
+                $uncompressed = @zlib_decode($rawStream);
+                if ($uncompressed !== false) $decompressed = $uncompressed;
+            }
+            if ($decompressed === '') {
+                $decompressed = $rawStream;
+            }
+
+            if (preg_match_all('/BT[\r\n\s]+(.*?)[\r\n\s]+ET/s', $decompressed, $btMatches)) {
+                foreach ($btMatches[1] as $btBlock) {
+                    preg_match_all('/\((.*?)\)\s*(?:Tj|TJ|\'|")/s', $btBlock, $strMatches);
+                    if (!empty($strMatches[1])) {
+                        foreach ($strMatches[1] as $str) {
+                            $str = str_replace(['\\\\', '\\(', '\\)'], ['\\', '(', ')'], $str);
+                            $text .= $str . ' ';
+                        }
+                        $text .= "\n";
+                    }
+
+                    preg_match_all('/\[\s*(.*?)\s*\]\s*TJ/s', $btBlock, $tjArrayMatches);
+                    if (!empty($tjArrayMatches[1])) {
+                        foreach ($tjArrayMatches[1] as $tjArray) {
+                            preg_match_all('/\((.*?)\)/s', $tjArray, $innerMatches);
+                            if (!empty($innerMatches[1])) {
+                                foreach ($innerMatches[1] as $str) {
+                                    $str = str_replace(['\\\\', '\\(', '\\)'], ['\\', '(', ')'], $str);
+                                    $text .= $str;
+                                }
+                                $text .= ' ';
+                            }
+                        }
+                        $text .= "\n";
+                    }
+                }
+            }
+        }
+
+        if (strlen(trim($text)) < 20) {
+            preg_match_all('/\((.*?)\)\s*Tj/s', $content, $rawMatches);
+            if (!empty($rawMatches[1])) {
+                foreach ($rawMatches[1] as $str) {
+                    $str = str_replace(['\\\\', '\\(', '\\)'], ['\\', '(', ')'], $str);
+                    $text .= $str . ' ';
+                }
+            }
+        }
+
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+        $text = preg_replace('/[^\x20-\x7E\x0A\x0D\x09]/', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text);
+
+        return trim($text);
     }
 
     private function extractImageIntelligence(array $document, string $path, string $ext): string

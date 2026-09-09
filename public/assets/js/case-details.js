@@ -581,8 +581,8 @@
     const bar=document.getElementById('cgProcessBar'), steps=document.getElementById('cgProcessSteps');
     const stageNames=['UPLOAD COMPLETE','TEXT EXTRACTION','ENTITY EXTRACTION','RELATIONSHIP EXTRACTION','NETWORK UPDATE','AI ANALYSIS'];
     modal.show(); bar.style.width='0%';
-    steps.innerHTML=stageNames.map(s=>`<div id="step-${s}" class="text-muted py-1"><i class="fa-regular fa-circle me-2"></i>${s}</div>`).join('');
-    let i=0;
+    steps.innerHTML=stageNames.map((s,idx)=>`<div id="step-${s}" class="${idx===0?'text-white':'text-muted'} py-1"><i class="${idx===0?'fa-solid fa-circle-check':'fa-regular fa-circle'} me-2" style="${idx===0?'color:var(--cg-success)':''}"></i>${s}</div>`).join('');
+    let i=1;
     const tick=setInterval(()=>{if(i<stageNames.length){const el=document.getElementById(`step-${stageNames[i]}`);if(el)el.innerHTML=`<i class="fa-solid fa-circle-check me-2" style="color:var(--cg-success)"></i>${stageNames[i]}`;i++;bar.style.width=Math.round(i/stageNames.length*90)+'%';}},350);
     let res;
     try { res=await cgApi('/api/documents/process.php',{method:'POST',body:JSON.stringify({document_id:documentId})}); }
@@ -592,7 +592,8 @@
       stageNames.forEach(s=>{const el=document.getElementById(`step-${s}`);if(el)el.innerHTML=`<i class="fa-solid fa-circle-check me-2" style="color:var(--cg-success)"></i>${s}`;});
       bar.style.width='100%';
     }else{
-      const failed=stageNames[Math.min(i,stageNames.length-1)];
+      const failedIdx=Math.max(1,Math.min(i,stageNames.length-1));
+      const failed=stageNames[failedIdx];
       const el=document.getElementById(`step-${failed}`); if(el)el.innerHTML=`<i class="fa-solid fa-circle-xmark me-2" style="color:var(--cg-critical)"></i>${failed}`;
     }
     setTimeout(async()=>{
