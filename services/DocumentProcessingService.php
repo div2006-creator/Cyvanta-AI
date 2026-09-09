@@ -173,18 +173,28 @@ class DocumentProcessingService
         if (!$content) return '';
 
         $text = '';
-        preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $content, $streamMatches);
+        preg_match_all('/stream[\r\n\n\r]+(.*?)[\r\n\n\r]*endstream/s', $content, $streamMatches);
         $streams = $streamMatches[1] ?? [];
 
         foreach ($streams as $rawStream) {
             $decompressed = '';
+            $trimmed = trim($rawStream);
+
             if (function_exists('gzuncompress')) {
-                $uncompressed = @gzuncompress($rawStream);
-                if ($uncompressed !== false) $decompressed = $uncompressed;
+                $u = @gzuncompress($rawStream);
+                if ($u === false) $u = @gzuncompress($trimmed);
+                if ($u !== false) $decompressed = $u;
+            }
+            if ($decompressed === '' && function_exists('gzinflate')) {
+                $u = @gzinflate($rawStream);
+                if ($u === false) $u = @gzinflate(substr($rawStream, 2));
+                if ($u === false) $u = @gzinflate($trimmed);
+                if ($u !== false) $decompressed = $u;
             }
             if ($decompressed === '' && function_exists('zlib_decode')) {
-                $uncompressed = @zlib_decode($rawStream);
-                if ($uncompressed !== false) $decompressed = $uncompressed;
+                $u = @zlib_decode($rawStream);
+                if ($u === false) $u = @zlib_decode($trimmed);
+                if ($u !== false) $decompressed = $u;
             }
             if ($decompressed === '') {
                 $decompressed = $rawStream;
@@ -211,6 +221,17 @@ class DocumentProcessingService
                                     $text .= $str;
                                 }
                                 $text .= ' ';
+                            }
+                        }
+                        $text .= "\n";
+                    }
+
+                    preg_match_all('/<([0-9A-Fa-f]{2,})>\s*Tj/s', $btBlock, $hexMatches);
+                    if (!empty($hexMatches[1])) {
+                        foreach ($hexMatches[1] as $hexStr) {
+                            $decoded = @hex2bin($hexStr);
+                            if ($decoded !== false) {
+                                $text .= $decoded . ' ';
                             }
                         }
                         $text .= "\n";
@@ -497,22 +518,22 @@ class DocumentProcessingService
                     continue;
                 }
 
-                if (in_array($nameCandidate, $documentsAndNotices, true) || preg_match('/\b(?:Question|Notices|Report|Overview|Study|Citation|Section|Offences|Record|Statement|Summary)\b/i', $nameCandidate)) {
+                if (in_array($nameCandidate, $documentsAndNotices, true) || preg_match('/\b(?:Question|Notices|Report|Overview|Study|Citation|Section|Offences|Record|Statement|Summary|Filename|Format|Tokens|Intelligence|Evidence|Metadata|Analysis|Size)\b/i', $nameCandidate)) {
                     $rejectedEntities[] = [
                         'candidate' => $nameCandidate,
                         'predicted_type' => 'Person',
-                        'reason' => 'Parliamentary document heading or generic term cannot be classified as PERSON (Section 1 rule compliance).',
+                        'reason' => 'Parliamentary document heading or system metadata term cannot be classified as PERSON.',
                         'source_text' => 'Document heading check: ' . $nameCandidate
                     ];
                     continue;
                 }
 
                 $firstWord = explode(' ', $nameCandidate)[0];
-                if (in_array($firstWord, ['The', 'According', 'This', 'That', 'These', 'Those', 'Following', 'Publicly', 'Court', 'Key', 'Real', 'World', 'Indian', 'Legal', 'Important', 'Case', 'High', 'Trial', 'Judicial', 'Digital', 'First'], true)) {
+                if (in_array($firstWord, ['The', 'According', 'This', 'That', 'These', 'Those', 'Following', 'Publicly', 'Court', 'Key', 'Real', 'World', 'Indian', 'Legal', 'Important', 'Case', 'High', 'Trial', 'Judicial', 'Digital', 'First', 'File', 'Original', 'Portable', 'Evidence', 'Context', 'Media', 'Photo', 'Video', 'Surveillance', 'Document', 'Format', 'Tokens', 'Intelligence', 'Analysis', 'Extracted', 'Report', 'Summary', 'Detected'], true)) {
                     $rejectedEntities[] = [
                         'candidate' => $nameCandidate,
                         'predicted_type' => 'Person',
-                        'reason' => 'English sentence starter or generic adjective rejected.',
+                        'reason' => 'English sentence starter or generic system term rejected.',
                         'source_text' => 'Sentence starter check: ' . $nameCandidate
                     ];
                     continue;
@@ -678,11 +699,21 @@ class DocumentProcessingService
 
     private function cleanMetadataHeaderNoise(string $text): string
     {
-        // Strip out document headers, page numbers, PDF metadata stamps
+        // Strip out document headers, page numbers, PDF metadata stamps, and system headers
         $text = preg_replace('/Page\s+\d+\s+of\s+\d+/i', '', $text);
         $text = preg_replace('/STARRED\s+QUESTION\s+NO\.?\s*\d+/i', '', $text);
         $text = preg_replace('/https?:\/\/\S+/i', '', $text);
-        return $text;
+
+        $lines = explode("\n", $text);
+        $cleanLines = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (preg_match('/^(Original Filename|File Type|File Size|File Format|Evidence Source|Surveillance Source|Extracted PDF Context Tokens|MEDIA INTELLIGENCE ANALYSIS|CASE DOCUMENT INTELLIGENCE|Visual Feature Annotations|Detected Photo Entity|Detected Video Entity)/i', $trimmed)) {
+                continue;
+            }
+            $cleanLines[] = $line;
+        }
+        return implode("\n", $cleanLines);
     }
 
     private function persistEntities(array $document, array $entities): array
