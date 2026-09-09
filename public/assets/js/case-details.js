@@ -567,7 +567,7 @@
     tbody.innerHTML = data.data.items.map(e => {
       const rInfo = (window.cgFormatRisk ? window.cgFormatRisk(e.risk_score, e.type_name, e.name, e.description) : { isEligible: false, scoreText: 'N/A', badgeClass: 'priority-low bg-secondary text-white' });
       return `
-      <tr><td class="fw-600 text-white">${e.name}</td><td>${e.type_name}</td>
+      <tr><td class="fw-600 text-dark">${e.name}</td><td>${e.type_name}</td>
       <td><span class="cg-priority ${rInfo.badgeClass}">${rInfo.scoreText}</span></td>
       <td>${e.connections}</td><td class="text-muted small">${e.description || '—'}</td></tr>`;
     }).join('');
@@ -601,7 +601,7 @@
       <div class="cg-card mb-3 p-3">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div>
-            <div class="fw-700 text-white fs-6">${getDocIcon(d.doc_type)} ${d.name}</div>
+            <div class="fw-700 text-dark fs-6">${getDocIcon(d.doc_type)} ${d.name}</div>
             <div class="small text-muted">${d.doc_type} · ${(d.file_size / (isVideo ? 1048576 : 1024)).toFixed(1)} ${isVideo ? 'MB' : 'KB'} · uploaded by ${d.uploaded_by_name || '—'} · ${new Date(d.uploaded_at).toLocaleString()}</div>
           </div>
           <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -732,17 +732,17 @@
       return `
       <div class="cg-card mb-2 p-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <div class="fw-700 text-white">${ev.evidence_type}</div>
+          <div class="fw-700 text-dark fs-6">${ev.evidence_type}</div>
           <div class="d-flex align-items-center gap-2">
             <span class="cg-badge-status status-new">${ev.status}</span>
             ${canDelete ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="window.cgDeleteEvidence(${ev.id})" title="${isSuperAdmin ? 'Delete Evidence (Super Admin Access)' : 'Delete My Uploaded Evidence'}"><i class="fa-solid fa-trash-can me-1"></i> Delete</button>` : ''}
           </div>
         </div>
-        <div class="small text-muted mb-2">${ev.description || ''}</div>
-        <div class="small text-muted border-top pt-2 mt-1" style="border-color:var(--cg-border-soft,#1e293b)!important">
-          <i class="fa-solid fa-file-lines me-1 text-primary"></i>Source Document: <strong class="text-white">${ev.source || 'Case Document'}</strong> · 
-          <i class="fa-solid fa-calendar-days me-1 text-warning"></i>Original Collection Date: <strong class="text-warning">${ev.collected_date || '—'}</strong> · 
-          <i class="fa-solid fa-user-shield me-1 text-info"></i>Uploaded By: <strong class="text-white">${ev.uploaded_by_name || 'Auto-Extracted'}</strong>
+        <div class="small text-secondary mb-2">${ev.description || ''}</div>
+        <div class="small text-muted border-top pt-2 mt-1" style="border-color:#e0f2fe!important">
+          <i class="fa-solid fa-file-lines me-1 text-primary"></i>Source Document: <strong class="text-dark">${ev.source || 'Case Document'}</strong> · 
+          <i class="fa-solid fa-calendar-days me-1 text-primary"></i>Original Collection Date: <strong class="text-primary fw-700">${ev.collected_date || '—'}</strong> · 
+          <i class="fa-solid fa-user-shield me-1 text-info"></i>Uploaded By: <strong class="text-dark">${ev.uploaded_by_name || 'Auto-Extracted'}</strong>
         </div>
       </div>`;
     }).join('');
@@ -788,7 +788,7 @@
       <div class="d-flex gap-3 mb-3">
         <div class="text-muted small" style="width:110px">${new Date(ev.created_at).toLocaleDateString()}</div>
         <div class="border-start ps-3" style="border-color:var(--cg-accent)!important">
-          <div class="fw-600 text-white">${ev.description}</div>
+          <div class="fw-600 text-dark">${ev.description}</div>
           <div class="small text-muted">${ev.event_type.replace(/_/g, ' ')} · ${ev.created_by_name || 'System'}</div>
         </div>
       </div>`).join('');
@@ -808,7 +808,7 @@
     el.innerHTML = data.data.patterns.map(p => `
       <div class="cg-card mb-2">
         <div class="d-flex justify-content-between">
-          <div class="fw-700 text-white">${p.pattern_type}</div>
+          <div class="fw-700 text-dark">${p.pattern_type}</div>
           <span class="cg-priority ${p.confidence >= 80 ? 'priority-critical' : p.confidence >= 60 ? 'priority-high' : 'priority-medium'}">Confidence ${p.confidence}%</span>
         </div>
         <div class="small text-muted">${p.reason}</div>
@@ -838,7 +838,7 @@
     el.innerHTML = data.data.items.map(n => `
       <div class="cg-card mb-2">
         <div class="d-flex justify-content-between">
-          <div class="fw-700 text-white">${n.title}</div>
+          <div class="fw-700 text-dark">${n.title}</div>
           <span class="small text-muted">${new Date(n.created_at).toLocaleString()}</span>
         </div>
         <div class="small text-muted mb-1">${n.note}</div>
@@ -864,7 +864,7 @@
     if (!data.success || !data.data.items.length) { el.innerHTML = '<div class="cg-empty-state"><i class="fa-solid fa-clock-rotate-left"></i>No activity recorded yet.</div>'; return; }
     el.innerHTML = data.data.items.map(a => `
       <div class="d-flex justify-content-between py-2 border-bottom" style="border-color:var(--cg-border-soft)!important">
-        <div><span class="text-white fw-600">${a.action.replace(/_/g, ' ')}</span> <span class="text-muted small">by ${a.user_name || 'System'}</span></div>
+        <div><span class="text-dark fw-600">${a.action.replace(/_/g, ' ')}</span> <span class="text-muted small">by ${a.user_name || 'System'}</span></div>
         <span class="small text-muted">${new Date(a.created_at).toLocaleString()}</span>
       </div>`).join('');
   }
