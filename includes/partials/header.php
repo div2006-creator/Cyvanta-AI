@@ -71,7 +71,6 @@ $base = cg_base_url();
           <div class="cg-notif-dropdown" id="cgNotifDropdown"></div>
         </div>
         <span class="cg-ws-status" id="cgWsStatus" title="Real-time connection status"><i class="fa-solid fa-circle"></i></span>
-        <a href="<?= $base ?>/logout.php" class="cg-icon-btn text-danger" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></a>
       </div>
     </header>
     <main class="cg-content">
