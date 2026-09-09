@@ -135,8 +135,18 @@ function cg_user_can_access_case(int $caseId, ?array $user = null): bool
     if (!$user) return false;
     if (in_array($user['role'], ['super_admin','administrator'], true)) return true;
     $pdo = Database::connect();
-    $stmt = $pdo->prepare('SELECT 1 FROM cases c WHERE c.id = ? AND (c.created_by = ? OR c.lead_investigator_id = ? OR EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id = c.id AND ca.user_id = ?)) LIMIT 1');
-    $stmt->execute([$caseId, $user['id'], $user['id'], $user['id']]);
+    $stmt = $pdo->prepare('
+        SELECT 1 FROM cases c 
+        WHERE c.id = ? 
+          AND (
+            c.created_by = ? 
+            OR c.lead_investigator_id = ? 
+            OR EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id = c.id AND ca.user_id = ?)
+            OR EXISTS (SELECT 1 FROM documents d WHERE d.case_id = c.id AND d.uploaded_by = ?)
+            OR EXISTS (SELECT 1 FROM evidence e WHERE e.case_id = c.id AND e.uploaded_by = ?)
+          ) LIMIT 1
+    ');
+    $stmt->execute([$caseId, $user['id'], $user['id'], $user['id'], $user['id'], $user['id']]);
     return (bool)$stmt->fetchColumn();
 }
 

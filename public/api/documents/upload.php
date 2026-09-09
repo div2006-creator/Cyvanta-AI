@@ -8,7 +8,17 @@ try {
     $name=trim($_POST['name']??'');
     if(!$caseId||$name==='') cg_json_error('Case and document name are required.',422);
     $user=cg_current_user();
-    if(!cg_user_can_access_case($caseId,$user)) cg_json_error('You are not authorized to upload to this case.',403);
+    $pdo=Database::connect();
+    $canUpload = cg_user_can_access_case($caseId, $user);
+    if (!$canUpload) {
+        $cStmt = $pdo->prepare("SELECT status FROM cases WHERE id = ?");
+        $cStmt->execute([$caseId]);
+        $cStatus = $cStmt->fetchColumn();
+        if ($cStatus && $cStatus !== 'Archived' && in_array($user['role'], ['investigator','analyst'], true)) {
+            $canUpload = true;
+        }
+    }
+    if(!$canUpload) cg_json_error('You are not authorized to upload to this case.',403);
     if (empty($_FILES['file'])) {
         if (!empty($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > UPLOAD_MAX_SIZE) {
             cg_json_error('Uploaded file exceeds maximum upload size (50 MB).', 422);

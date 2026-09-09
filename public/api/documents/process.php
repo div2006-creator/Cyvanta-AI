@@ -8,7 +8,8 @@ if(!$documentId)cg_json_error('Document id is required.',422);
 $pdo=Database::connect(); $user=cg_current_user();
 $stmt=$pdo->prepare('SELECT d.*,c.case_number FROM documents d JOIN cases c ON c.id=d.case_id WHERE d.id=?');$stmt->execute([$documentId]);$document=$stmt->fetch();
 if(!$document)cg_json_error('Document not found.',404);
-if(!cg_user_can_access_case((int)$document['case_id'],$user))cg_json_error('You are not authorized to process this document.',403);
+$isUploader = ((int) ($document['uploaded_by'] ?? 0) === (int) $user['id']);
+if(!$isUploader && !cg_user_can_access_case((int)$document['case_id'],$user))cg_json_error('You are not authorized to process this document.',403);
 try{
  $service=new DocumentProcessingService($pdo); $result=$service->process($documentId);
  $pdo->prepare('INSERT INTO case_events (case_id,event_type,description,created_by,created_at) VALUES (?,?,?,?,NOW())')->execute([$document['case_id'],'DOCUMENT_PROCESSED',"Document {$document['name']} processed: {$result['entities_found']} entities and {$result['relationships_found']} relationships found.",$user['id']]);

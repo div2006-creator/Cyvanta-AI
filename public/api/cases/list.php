@@ -14,9 +14,9 @@ $where = ['1=1'];
 $params = [];
 
 $user = cg_current_user();
-if ($user['role'] === 'investigator') {
-    $where[] = '(c.lead_investigator_id = ? OR c.created_by = ? OR EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id = c.id AND ca.user_id = ?))';
-    array_push($params, $user['id'], $user['id'], $user['id']);
+if (in_array($user['role'], ['investigator', 'analyst', 'viewer'], true)) {
+    $where[] = '(c.lead_investigator_id = ? OR c.created_by = ? OR EXISTS (SELECT 1 FROM case_assignments ca WHERE ca.case_id = c.id AND ca.user_id = ?) OR EXISTS (SELECT 1 FROM documents d WHERE d.case_id = c.id AND d.uploaded_by = ?) OR EXISTS (SELECT 1 FROM evidence e WHERE e.case_id = c.id AND e.uploaded_by = ?))';
+    array_push($params, $user['id'], $user['id'], $user['id'], $user['id'], $user['id']);
 }
 if ($search !== '') {
     $where[] = '(c.title LIKE ? OR c.case_number LIKE ? OR c.description LIKE ?)';
