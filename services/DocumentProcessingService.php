@@ -635,39 +635,57 @@ class DocumentProcessingService
         }
 
         // Person / Entity Name Candidate Parsing with Semantic Classification Engine
-        if (preg_match_all('/\b([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/', $cleanText, $m)) {
-            foreach (array_unique($m[1]) as $nameCandidate) {
-                $nameCandidate = trim($nameCandidate);
-                $determinedType = cg_determine_entity_type($nameCandidate);
+        // Pattern 1: Title Case Names (e.g. Manu Sharma, Bina Ramani)
+        // Pattern 2: UPPERCASE Names (e.g. MANU SHARMA, ROHAN VERMA)
+        // Pattern 3: Honorifics / Role Titles (e.g. Mr. Manu Sharma, Accused Rohan Verma)
+        $personRegexes = [
+            '/\b([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/',
+            '/\b([A-Z]{2,}\s+[A-Z]{2,}(?:\s+[A-Z]{2,})?)\b/',
+            '/\b(?i:Mr\.?|Mrs\.?|Ms\.?|Shri|Smt\.?|Dr\.?|Officer|Inspector|Constable|Advocate|Judge|Suspect|Accused|Witness|Agent)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/',
+            '/\b(?i:Mr\.?|Mrs\.?|Ms\.?|Shri|Smt\.?|Dr\.?|Officer|Inspector|Constable|Advocate|Judge|Suspect|Accused|Witness|Agent)\s+([A-Z]{2,}(?:\s+[A-Z]{2,}){0,2})\b/'
+        ];
 
-                if ($determinedType !== 'Person') {
-                    // Re-route to true semantic type candidate if non-person
-                    if (!in_array($determinedType, ['Document', 'Organization'], true) || preg_match('/\b(tata|safari|maruti|toyota|honda|court|police|cbi|hospital|bank)\b/i', $nameCandidate)) {
-                        $rawCandidates[] = ['name' => $nameCandidate, 'type' => $determinedType, 'risk' => -1, 'confidence' => 90];
-                    } else {
+        foreach ($personRegexes as $pRegex) {
+            if (preg_match_all($pRegex, $cleanText, $m)) {
+                foreach (array_unique($m[1]) as $nameCandidate) {
+                    $nameCandidate = trim($nameCandidate);
+                    if (strlen($nameCandidate) < 3) continue;
+
+                    // Normalize ALL CAPS names to Title Case for clean display
+                    if (preg_match('/^[A-Z\s]+$/', $nameCandidate)) {
+                        $nameCandidate = ucwords(strtolower($nameCandidate));
+                    }
+
+                    $determinedType = cg_determine_entity_type($nameCandidate);
+
+                    if ($determinedType !== 'Person') {
+                        if (!in_array($determinedType, ['Document', 'Organization'], true) || preg_match('/\b(tata|safari|maruti|toyota|honda|court|police|cbi|hospital|bank)\b/i', $nameCandidate)) {
+                            $rawCandidates[] = ['name' => $nameCandidate, 'type' => $determinedType, 'risk' => -1, 'confidence' => 90];
+                        } else {
+                            $rejectedEntities[] = [
+                                'candidate' => $nameCandidate,
+                                'predicted_type' => 'Person',
+                                'reason' => "Non-person token reclassified as $determinedType and excluded from Person list.",
+                                'source_text' => 'Semantic check: ' . $nameCandidate
+                            ];
+                        }
+                        continue;
+                    }
+
+                    $firstWord = explode(' ', $nameCandidate)[0];
+                    if (in_array($firstWord, ['The', 'According', 'This', 'That', 'These', 'Those', 'Following', 'Publicly', 'Court', 'Key', 'Real', 'World', 'Indian', 'Legal', 'Important', 'Case', 'High', 'Trial', 'Judicial', 'Digital', 'First', 'File', 'Original', 'Portable', 'Evidence', 'Context', 'Media', 'Photo', 'Video', 'Surveillance', 'Document', 'Format', 'Tokens', 'Intelligence', 'Analysis', 'Extracted', 'Report', 'Summary', 'Detected'], true)) {
                         $rejectedEntities[] = [
                             'candidate' => $nameCandidate,
                             'predicted_type' => 'Person',
-                            'reason' => "Non-person token reclassified as $determinedType and excluded from Person list.",
-                            'source_text' => 'Semantic check: ' . $nameCandidate
+                            'reason' => 'English sentence starter or generic system term rejected.',
+                            'source_text' => 'Sentence starter check: ' . $nameCandidate
                         ];
+                        continue;
                     }
-                    continue;
-                }
 
-                $firstWord = explode(' ', $nameCandidate)[0];
-                if (in_array($firstWord, ['The', 'According', 'This', 'That', 'These', 'Those', 'Following', 'Publicly', 'Court', 'Key', 'Real', 'World', 'Indian', 'Legal', 'Important', 'Case', 'High', 'Trial', 'Judicial', 'Digital', 'First', 'File', 'Original', 'Portable', 'Evidence', 'Context', 'Media', 'Photo', 'Video', 'Surveillance', 'Document', 'Format', 'Tokens', 'Intelligence', 'Analysis', 'Extracted', 'Report', 'Summary', 'Detected'], true)) {
-                    $rejectedEntities[] = [
-                        'candidate' => $nameCandidate,
-                        'predicted_type' => 'Person',
-                        'reason' => 'English sentence starter or generic system term rejected.',
-                        'source_text' => 'Sentence starter check: ' . $nameCandidate
-                    ];
-                    continue;
+                    // Valid Person candidate
+                    $rawCandidates[] = ['name' => $nameCandidate, 'type' => 'Person', 'risk' => 40, 'confidence' => 85];
                 }
-
-                // Valid Person candidate
-                $rawCandidates[] = ['name' => $nameCandidate, 'type' => 'Person', 'risk' => 40, 'confidence' => 85];
             }
         }
 
@@ -702,6 +720,20 @@ class DocumentProcessingService
         }
         $entities = array_values($filteredList);
 
+        // Attach search tokens to entities so sentence matching captures last names / aliases
+        foreach ($entities as &$eRef) {
+            $tokens = [mb_strtolower($eRef['name'])];
+            $parts = preg_split('/\s+/', trim($eRef['name']));
+            if (count($parts) >= 2) {
+                $lastName = mb_strtolower(end($parts));
+                if (strlen($lastName) >= 4 && !in_array($lastName, ['court', 'police', 'state', 'india', 'agency', 'group', 'north', 'south', 'east', 'west', 'photo', 'video', 'frame', 'unit'], true)) {
+                    $tokens[] = $lastName;
+                }
+            }
+            $eRef['_search_tokens'] = array_unique($tokens);
+        }
+        unset($eRef);
+
         // 4. SENTENCE-LEVEL EVIDENCE-BACKED RELATIONSHIP EXTRACTION
         $sentences = preg_split('/(?<=[.?!])\s+|\n+/', $cleanText);
         $relationships = [];
@@ -714,7 +746,14 @@ class DocumentProcessingService
 
             $presentInSentence = [];
             foreach ($entities as $e) {
-                if (stripos($sentence, $e['name']) !== false) {
+                $matched = false;
+                foreach ($e['_search_tokens'] as $st) {
+                    if (stripos($sentence, $st) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($matched) {
                     $presentInSentence[] = $e;
                 }
             }
@@ -852,13 +891,17 @@ class DocumentProcessingService
     {
         $map = [];
         $typeStmt = $this->pdo->prepare('SELECT id FROM entity_types WHERE name = ?');
-        $findStmt = $this->pdo->prepare('SELECT id FROM entities WHERE case_id = ? AND name = ?');
+        $findStmt = $this->pdo->prepare('SELECT id FROM entities WHERE case_id = ? AND LOWER(name) = LOWER(?)');
         $insertStmt = $this->pdo->prepare(
             'INSERT INTO entities (case_id, entity_type_id, name, description, risk_score, possible_aliases, source_document_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
         );
 
         foreach ($entities as $e) {
-            $determinedType = cg_determine_entity_type($e['name'], '', $e['type'] ?? 'Person');
+            $nameClean = trim($e['name']);
+            if (preg_match('/^[A-Z\s]+$/', $nameClean) && strlen($nameClean) > 2) {
+                $nameClean = ucwords(strtolower($nameClean));
+            }
+            $determinedType = cg_determine_entity_type($nameClean, '', $e['type'] ?? 'Person');
             $typeStmt->execute([$determinedType]);
             $typeId = $typeStmt->fetchColumn();
             if (!$typeId) {
@@ -866,11 +909,15 @@ class DocumentProcessingService
                 $typeId = $typeStmt->fetchColumn() ?: 1;
             }
 
-            $findStmt->execute([$document['case_id'], $e['name']]);
+            $findStmt->execute([$document['case_id'], $nameClean]);
             $existingId = $findStmt->fetchColumn();
             if ($existingId) {
-                $map[$e['name']] = (int) $existingId;
-                $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
+                $entId = (int) $existingId;
+                $map[$nameClean] = $entId;
+                $map[mb_strtolower($nameClean)] = $entId;
+                $map[mb_strtolower($e['name'])] = $entId;
+
+                $isEligible = cg_is_entity_risk_eligible($determinedType, $nameClean, '');
                 $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
                 $this->pdo->prepare('UPDATE entities SET entity_type_id = ?, risk_score = ? WHERE id = ?')
                     ->execute([$typeId, $riskToSave, $existingId]);
@@ -878,18 +925,21 @@ class DocumentProcessingService
             }
 
             $aliases = $e['possible_aliases'] ?? null;
-            $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
+            $isEligible = cg_is_entity_risk_eligible($determinedType, $nameClean, '');
             $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
             $insertStmt->execute([
                 $document['case_id'],
                 $typeId,
-                $e['name'],
+                $nameClean,
                 'Auto-extracted from document: ' . $document['name'],
                 $riskToSave,
                 $aliases,
                 $document['id'],
             ]);
-            $map[$e['name']] = (int) $this->pdo->lastInsertId();
+            $newId = (int) $this->pdo->lastInsertId();
+            $map[$nameClean] = $newId;
+            $map[mb_strtolower($nameClean)] = $newId;
+            $map[mb_strtolower($e['name'])] = $newId;
         }
         return $map;
     }
@@ -902,11 +952,26 @@ class DocumentProcessingService
             'INSERT INTO relationships (case_id, source_entity_id, target_entity_id, relationship_type_id, strength, confidence, evidence_text, source_page, source_document_id, extraction_timestamp, created_at)
              VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, NOW())'
         );
+        $findEntStmt = $this->pdo->prepare('SELECT id FROM entities WHERE case_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) LIMIT 1');
+
         $count = 0;
         foreach ($relationships as $r) {
-            $srcId = $entityIdMap[$r['a']] ?? null;
-            $tgtId = $entityIdMap[$r['b']] ?? null;
-            if (!$srcId || !$tgtId || $srcId === $tgtId)
+            $srcName = trim($r['a']);
+            $tgtName = trim($r['b']);
+
+            $srcId = $entityIdMap[$srcName] ?? $entityIdMap[mb_strtolower($srcName)] ?? null;
+            if (!$srcId) {
+                $findEntStmt->execute([$document['case_id'], $srcName, '%' . $srcName . '%']);
+                $srcId = $findEntStmt->fetchColumn() ?: null;
+            }
+
+            $tgtId = $entityIdMap[$tgtName] ?? $entityIdMap[mb_strtolower($tgtName)] ?? null;
+            if (!$tgtId) {
+                $findEntStmt->execute([$document['case_id'], $tgtName, '%' . $tgtName . '%']);
+                $tgtId = $findEntStmt->fetchColumn() ?: null;
+            }
+
+            if (!$srcId || !$tgtId || (int)$srcId === (int)$tgtId)
                 continue;
 
             $relTypeStmt->execute([$r['type']]);
