@@ -46,6 +46,7 @@ class DocumentProcessingService
         $relCount = $this->persistRelationships($document, $entityIdMap, $result['relationships']);
         $this->persistRejectedEntities($document, $result['rejected_entities'] ?? []);
         $this->persistTimelineEvents($document, $result['timeline'] ?? []);
+        $evCount = $this->persistExtractedEvidence($document, $result);
 
         $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'completed', "$relCount relationships found");
         if (count($result['entities']) > 0) {
@@ -1043,6 +1044,135 @@ class DocumentProcessingService
                 'Date: ' . $t['date_text'] . ' — ' . $t['description']
             ]);
         }
+    }
+
+    public function parseOriginalDate(?string $dateStr, string $fallbackDate): string
+    {
+        if (empty($dateStr)) {
+            return date('Y-m-d', strtotime($fallbackDate));
+        }
+        $raw = trim($dateStr);
+        if (preg_match('/^(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})$/', $raw, $m)) {
+            $day = (int)$m[1]; $month = (int)$m[2]; $year = (int)$m[3];
+            if (checkdate($month, $day, $year)) {
+                return sprintf('%04d-%02d-%02d', $year, $month, $day);
+            }
+        }
+        if (preg_match('/^(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})$/', $raw, $m)) {
+            return sprintf('%04d-%02d-%02d', (int)$m[1], (int)$m[2], (int)$m[3]);
+        }
+        $ts = strtotime($raw);
+        if ($ts !== false && $ts > 0) {
+            return date('Y-m-d', $ts);
+        }
+        if (preg_match('/\b(19\d\d|20\d\d)\b/', $raw, $m)) {
+            return $m[1] . '-01-01';
+        }
+        return date('Y-m-d', strtotime($fallbackDate));
+    }
+
+    public function persistExtractedEvidence(array $document, array $result): int
+    {
+        $caseId = (int) $document['case_id'];
+        $uploadedBy = !empty($document['uploaded_by']) ? (int)$document['uploaded_by'] : null;
+        $docName = $document['original_filename'] ?? $document['name'] ?? 'Document File';
+        $fallbackDate = $document['uploaded_at'] ?? date('Y-m-d H:i:s');
+        $count = 0;
+
+        $checkStmt = $this->pdo->prepare('SELECT id FROM evidence WHERE case_id = ? AND source = ? AND description = ?');
+        $insertStmt = $this->pdo->prepare('
+            INSERT INTO evidence (case_id, evidence_type, description, source, collected_date, uploaded_by, status, confidentiality, stored_filename, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ');
+
+        if (!empty($result['timeline'])) {
+            foreach ($result['timeline'] as $tItem) {
+                $origDate = $this->parseOriginalDate($tItem['date_text'] ?? null, $fallbackDate);
+                $desc = 'Timeline Artifact [' . ($tItem['date_text'] ?? '') . ']: ' . trim($tItem['description'] ?? '');
+
+                $checkStmt->execute([$caseId, $docName, $desc]);
+                if (!$checkStmt->fetchColumn()) {
+                    $insertStmt->execute([
+                        $caseId,
+                        'Document Timeline Evidence',
+                        $desc,
+                        $docName,
+                        $origDate,
+                        $uploadedBy,
+                        'Verified',
+                        'Internal',
+                        $document['stored_filename'] ?? null
+                    ]);
+                    $count++;
+                }
+            }
+        }
+
+        if (!empty($result['entities']) || !empty($result['relationships'])) {
+            $firstDateStr = !empty($result['timeline'][0]['date_text']) ? $result['timeline'][0]['date_text'] : null;
+            $collectedDate = $this->parseOriginalDate($firstDateStr, $fallbackDate);
+
+            $entNames = array_slice(array_column($result['entities'], 'name'), 0, 6);
+            $entStr = implode(', ', $entNames);
+            $desc = "Extracted Intelligence (" . count($result['entities']) . " Entities, " . count($result['relationships']) . " Relationships). Key Entities: " . ($entStr ?: 'None');
+
+            $checkStmt->execute([$caseId, $docName, $desc]);
+            if (!$checkStmt->fetchColumn()) {
+                $insertStmt->execute([
+                    $caseId,
+                    'Document Intelligence Finding',
+                    $desc,
+                    $docName,
+                    $collectedDate,
+                    $uploadedBy,
+                    'Verified',
+                    'Internal',
+                    $document['stored_filename'] ?? null
+                ]);
+                $count++;
+            }
+        }
+
+        $ext = strtolower(pathinfo($docName, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff'], true)) {
+            $desc = "Photo Evidence OCR & Visual Feature Annotations: " . ($document['description'] ?? $docName);
+            $collectedDate = $this->parseOriginalDate(null, $fallbackDate);
+            $checkStmt->execute([$caseId, $docName, $desc]);
+            if (!$checkStmt->fetchColumn()) {
+                $insertStmt->execute([
+                    $caseId,
+                    'Photo OCR Evidence',
+                    $desc,
+                    $docName,
+                    $collectedDate,
+                    $uploadedBy,
+                    'Verified',
+                    'Internal',
+                    $document['stored_filename'] ?? null
+                ]);
+                $count++;
+            }
+        } elseif (in_array($ext, ['mp4', 'avi', 'mov', 'mkv', 'webm'], true)) {
+            $desc = "Surveillance Video Keyframes & Timeline Features: " . ($document['description'] ?? $docName);
+            $collectedDate = $this->parseOriginalDate(null, $fallbackDate);
+            $checkStmt->execute([$caseId, $docName, $desc]);
+            if (!$checkStmt->fetchColumn()) {
+                $insertStmt->execute([
+                    $caseId,
+                    'Video Surveillance Evidence',
+                    $desc,
+                    $docName,
+                    $collectedDate,
+                    $uploadedBy,
+                    'Verified',
+                    'Internal',
+                    $document['stored_filename'] ?? null
+                ]);
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     private function recordAnalysis(array $document, int $entitiesFound, int $relationshipsFound): int

@@ -738,8 +738,12 @@
             ${canDelete ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="window.cgDeleteEvidence(${ev.id})" title="${isSuperAdmin ? 'Delete Evidence (Super Admin Access)' : 'Delete My Uploaded Evidence'}"><i class="fa-solid fa-trash-can me-1"></i> Delete</button>` : ''}
           </div>
         </div>
-        <div class="small text-muted mb-1">${ev.description || ''}</div>
-        <div class="small text-muted">Source: ${ev.source || '—'} · Collected: ${ev.collected_date || '—'} · By ${ev.uploaded_by_name || '—'}</div>
+        <div class="small text-muted mb-2">${ev.description || ''}</div>
+        <div class="small text-muted border-top pt-2 mt-1" style="border-color:var(--cg-border-soft,#1e293b)!important">
+          <i class="fa-solid fa-file-lines me-1 text-primary"></i>Source Document: <strong class="text-white">${ev.source || 'Case Document'}</strong> · 
+          <i class="fa-solid fa-calendar-days me-1 text-warning"></i>Original Collection Date: <strong class="text-warning">${ev.collected_date || '—'}</strong> · 
+          <i class="fa-solid fa-user-shield me-1 text-info"></i>Uploaded By: <strong class="text-white">${ev.uploaded_by_name || 'Auto-Extracted'}</strong>
+        </div>
       </div>`;
     }).join('');
   }
@@ -1005,14 +1009,18 @@
           ` : '<div class="text-muted small">No relationships extracted.</div>'}
         </div>
 
-        <!-- Section 8: Evidence -->
+        <!-- Section 8: Evidence Inventory & Repository Link -->
         <div class="mb-4">
-          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-folder-open text-primary me-2"></i>8. Evidence Inventory (${rData.evidence.length})</h6>
-          ${rData.evidence.length ? `
-            <ul class="list-group list-group-flush border rounded-3 small">
-              ${rData.evidence.map(e => `<li class="list-group-item"><strong>${e.evidence_type}</strong>: ${e.description}</li>`).join('')}
-            </ul>
-          ` : '<div class="text-muted small">No evidence items recorded.</div>'}
+          <h6 class="fw-800 text-dark text-uppercase border-bottom pb-2 mb-3"><i class="fa-solid fa-folder-open text-primary me-2"></i>8. Evidence Inventory & Repository (${rData.evidence.length} Items Collected)</h6>
+          <div class="p-3 border rounded bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div class="fw-700 text-dark small mb-1"><i class="fa-solid fa-shield-halved text-success me-1"></i> ${rData.evidence.length} Evidence Items Cataloged & Verified</div>
+              <div class="small text-secondary">All document evidence items, original collection dates, OCR findings, and timeline artifacts are securely cataloged in the Evidence section.</div>
+            </div>
+            <button class="cg-btn cg-btn-primary cg-btn-sm no-print" onclick="activateTab('evidence')">
+              <i class="fa-solid fa-folder-open me-1"></i> Inspect Evidence Repository (${rData.evidence.length})
+            </button>
+          </div>
         </div>
 
         <!-- Section 9: Network Analysis -->
