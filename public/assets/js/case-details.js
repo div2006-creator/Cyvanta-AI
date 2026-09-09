@@ -288,7 +288,10 @@
       };
     }));
 
-    allEdges = new vis.DataSet(rels.map(r => {
+    const entityIdSet = new Set(entities.map(e => e.id));
+    const validRels = rels.filter(r => entityIdSet.has(r.source_entity_id) && entityIdSet.has(r.target_entity_id));
+
+    allEdges = new vis.DataSet(validRels.map(r => {
       const relType = r.rel_type || 'ASSOCIATED_WITH';
       const edgeColor = REL_COLOR_MAP[relType] || '#0284c7';
       const isDashed = ['CALLS', 'MENTIONED_IN'].includes(relType);
@@ -605,8 +608,8 @@
             <span class="cg-badge-status ${statusColor[d.status] || 'status-new'}">${d.status}</span>
             ${(isVideo || isImage) ? `<button class="cg-btn cg-btn-outline cg-btn-sm" onclick="const el=document.getElementById('mediaPreview-${d.id}');if(el)el.hidden=!el.hidden;"><i class="fa-solid ${isVideo ? 'fa-circle-play text-warning' : 'fa-image text-info'}"></i> ${isVideo ? 'Play Video & Frame Log' : 'View Photo & OCR'}</button>` : ''}
             ${d.status === 'Uploaded' || d.status === 'Failed'
-              ? `<button class="cg-btn cg-btn-primary cg-btn-sm" onclick="window.cgProcessDocument(${d.id})"><i class="fa-solid fa-gears"></i> Process</button>`
-              : ''}
+              ? `<button class="cg-btn cg-btn-primary cg-btn-sm" onclick="window.cgProcessDocument(${d.id})"><i class="fa-solid fa-gears me-1"></i> Process & Analyse</button>`
+              : `<button class="cg-btn cg-btn-success cg-btn-sm" onclick="window.cgAnalyseDocNetwork(${d.id})"><i class="fa-solid fa-diagram-project me-1"></i> Analyse Network</button>`}
             ${canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="window.cgDeleteDocument(${d.id})" title="${isSuperAdmin ? 'Delete Document (Super Admin Access)' : 'Delete My Uploaded Document'}"><i class="fa-solid fa-trash-can me-1"></i> Delete</button>` : ''}
           </div>
         </div>
@@ -625,6 +628,15 @@
       </div>`;
     }).join('');
   }
+
+  window.cgAnalyseDocNetwork = async function (documentId) {
+    activateTab('network');
+    const docFilter = document.getElementById('cgGraphDocFilter');
+    if (docFilter) {
+      docFilter.value = String(documentId);
+    }
+    await loadGraph();
+  };
 
   window.cgDeleteDocument = async function (documentId) {
     if (!confirm('Are you sure you want to delete this document? This will also remove extracted intelligence and update network analysis.')) return;
@@ -667,10 +679,15 @@
     setTimeout(async()=>{
       modal.hide();
       if(res.success){
-        cgToast(res.message||'Document uploaded and processed successfully.','success');
+        cgToast(res.message||'Document processed and analyzed successfully.','success');
         loaded.documents=false; loaded.network=false; loaded.entities=false; loaded.overview=false; loaded.activity=false;
         await loadDocuments(); loadSnapshot();
-        if(document.querySelector('.cg-tab.active')?.dataset.tab==='network')loadGraph();
+        activateTab('network');
+        const docFilter = document.getElementById('cgGraphDocFilter');
+        if (docFilter) {
+          docFilter.value = String(documentId);
+        }
+        await loadGraph();
         if(document.querySelector('.cg-tab.active')?.dataset.tab==='entities')loadEntities();
         if(document.querySelector('.cg-tab.active')?.dataset.tab==='activity')loadActivity();
       }else cgToast(res.message||'Unable to process document.','error');
@@ -685,9 +702,12 @@
         const fd=new FormData(docForm);fd.append('case_id',caseId);
         const res=await cgApi('/api/documents/upload.php',{method:'POST',body:fd});
         if(res.success){
-          cgToast(res.message||'Document uploaded successfully.','success');
+          cgToast(res.message||'Document uploaded successfully. Starting network analysis…','success');
           const modal=bootstrap.Modal.getInstance(document.getElementById('cgDocModal'));if(modal)modal.hide();
-          docForm.reset();loaded.documents=false;loaded.overview=false;loadDocuments();loadSnapshot();
+          docForm.reset();loaded.documents=false;loaded.overview=false;await loadDocuments();loadSnapshot();
+          if (res.data && res.data.id) {
+            window.cgProcessDocument(res.data.id);
+          }
         }else cgToast(res.message||'Unable to upload the document.','error');
       }catch(e){console.error(e);cgToast('Unable to upload the document.','error');}
       finally{if(submit){submit.disabled=false;submit.innerHTML=submit.dataset.original||'Upload';}}

@@ -5,7 +5,7 @@ $caseId = (int) ($_GET['case_id'] ?? 0);
 $documentId = (int) ($_GET['document_id'] ?? 0);
 $pdo = Database::connect();
 
-if ($caseId > 0 && $documentId === 0) {
+if ($caseId > 0) {
     try {
         $analyzer = new AnalysisService($pdo);
         $analyzer->runForCase($caseId);
