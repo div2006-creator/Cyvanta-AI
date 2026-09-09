@@ -32,8 +32,8 @@ function cg_base_url(string $path = ''): string
     // Works whether the app lives at web root (e.g. `php -S localhost:8000 -t public`)
     // or in a subfolder (e.g. http://localhost/crimegraph-ai/public/...).
     $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-    if (str_ends_with($scriptDir, '/admin')) {
-        $scriptDir = substr($scriptDir, 0, -strlen('/admin'));
+    if (preg_match('#^(.*?)(?:/api(?:/.*)?|/admin(?:/.*)?)$#', $scriptDir, $matches)) {
+        $scriptDir = $matches[1];
     }
     if (str_ends_with($scriptDir, '/public')) {
         $scriptDir = substr($scriptDir, 0, -strlen('/public'));

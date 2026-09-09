@@ -25,7 +25,7 @@ require __DIR__ . '/../includes/partials/header.php';
         <div class="d-flex justify-content-between py-1"><span class="text-muted">Last Login</span><span><?= $profile['last_login'] ? date('d M Y, H:i', strtotime($profile['last_login'])) : '—' ?></span></div>
         <div class="d-flex justify-content-between py-1"><span class="text-muted">Account Status</span><span class="text-success"><?= $profile['is_active'] ? 'Active' : 'Disabled' ?></span></div>
       </div>
-      <a href="api/auth/logout.php" class="cg-btn cg-btn-outline w-100 justify-content-center mt-3"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+      <a href="<?= cg_base_url('/api/auth/logout.php') ?>" class="cg-btn cg-btn-outline w-100 justify-content-center mt-3"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
     </div>
   </div>
   <div class="col-lg-8">

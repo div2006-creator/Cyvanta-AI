@@ -43,14 +43,15 @@ $base = cg_base_url();
       <a href="<?= $base ?>/admin/index.php" class="<?= $activeNav === 'admin' ? 'active' : '' ?>"><i class="fa-solid fa-shield-halved"></i> Admin Panel</a>
       <?php endif; ?>
     </nav>
-    <div class="cg-sidebar-footer">
-      <a href="<?= $base ?>/profile.php" class="cg-user-chip">
+    <div class="cg-sidebar-footer d-flex align-items-center justify-content-between">
+      <a href="<?= $base ?>/profile.php" class="cg-user-chip flex-grow-1">
         <span class="cg-avatar"><?= strtoupper(substr($user['name'] ?? 'U', 0, 1)) ?></span>
         <span>
           <div class="cg-user-name"><?= htmlspecialchars($user['name'] ?? '') ?></div>
           <div class="cg-user-role"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $user['role'] ?? ''))) ?></div>
         </span>
       </a>
+      <a href="<?= $base ?>/logout.php" class="btn btn-sm btn-outline-danger ms-2" title="Sign Out / Logout"><i class="fa-solid fa-right-from-bracket"></i></a>
     </div>
   </aside>
 
@@ -70,6 +71,7 @@ $base = cg_base_url();
           <div class="cg-notif-dropdown" id="cgNotifDropdown"></div>
         </div>
         <span class="cg-ws-status" id="cgWsStatus" title="Real-time connection status"><i class="fa-solid fa-circle"></i></span>
+        <a href="<?= $base ?>/logout.php" class="cg-icon-btn text-danger" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></a>
       </div>
     </header>
     <main class="cg-content">
