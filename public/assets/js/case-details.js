@@ -44,7 +44,7 @@
       }
     });
 
-    if (!loaded[name]) {
+    if (!loaded[name] || name === 'evidence' || name === 'reports' || name === 'overview') {
       loaded[name] = true;
       try { loadTab(name); } catch (e) { console.error('Tab load error:', e); }
     }
@@ -644,7 +644,7 @@
       const res = await cgApi('/api/documents/delete.php', { method: 'POST', body: JSON.stringify({ document_id: documentId }) });
       if (res.success) {
         cgToast(res.message || 'Document deleted successfully.', 'success');
-        loaded.documents = false; loaded.network = false; loaded.entities = false; loaded.overview = false;
+        loaded.documents = false; loaded.network = false; loaded.entities = false; loaded.evidence = false; loaded.overview = false; loaded.reports = false;
         await loadDocuments(); loadSnapshot();
         if (document.querySelector('.cg-tab.active')?.dataset.tab === 'network') loadGraph();
         if (document.querySelector('.cg-tab.active')?.dataset.tab === 'entities') loadEntities();
@@ -680,7 +680,7 @@
       modal.hide();
       if(res.success){
         cgToast(res.message||'Document processed and analyzed successfully.','success');
-        loaded.documents=false; loaded.network=false; loaded.entities=false; loaded.overview=false; loaded.activity=false;
+        loaded.documents=false; loaded.network=false; loaded.entities=false; loaded.evidence=false; loaded.overview=false; loaded.activity=false; loaded.reports=false;
         await loadDocuments(); loadSnapshot();
         activateTab('network');
         const docFilter = document.getElementById('cgGraphDocFilter');
@@ -704,7 +704,7 @@
         if(res.success){
           cgToast(res.message||'Document uploaded successfully. Starting network analysis…','success');
           const modal=bootstrap.Modal.getInstance(document.getElementById('cgDocModal'));if(modal)modal.hide();
-          docForm.reset();loaded.documents=false;loaded.overview=false;await loadDocuments();loadSnapshot();
+          docForm.reset();loaded.documents=false;loaded.evidence=false;loaded.overview=false;loaded.reports=false;await loadDocuments();loadSnapshot();
           const newDocId = res.data ? (res.data.document_id || res.data.id) : null;
           if (newDocId) {
             window.cgProcessDocument(newDocId);
