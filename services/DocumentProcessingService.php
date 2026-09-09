@@ -28,61 +28,38 @@ class DocumentProcessingService
             throw new RuntimeException('Document not found.');
         }
 
+        $this->updateStage($documentId, 'TEXT_EXTRACTION', 'in_progress');
         $this->setDocStatus($documentId, 'Processing');
+        $text = $this->extractText($document);
+        $this->updateStage($documentId, 'TEXT_EXTRACTION', 'completed', strlen($text) . ' characters extracted');
 
-        try {
-            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'in_progress');
-            $text = $this->extractText($document);
-            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'completed', strlen($text) . ' characters extracted');
-        } catch (Throwable $e) {
-            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'failed', $e->getMessage());
-            $this->setDocStatus($documentId, 'Failed');
-            throw $e;
+        $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'in_progress');
+        if (AI_SERVICE_ENABLED && AI_SERVICE_URL) {
+            $result = $this->callExternalAiService($text);
+        } else {
+            $result = $this->runDeterministicExtraction($text);
         }
+        $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'completed', count($result['entities']) . ' entities found (' . count($result['rejected_entities'] ?? []) . ' rejected)');
 
-        try {
-            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'in_progress');
-            if (AI_SERVICE_ENABLED && AI_SERVICE_URL) {
-                $result = $this->callExternalAiService($text);
-            } else {
-                $result = $this->runDeterministicExtraction($text);
-            }
-            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'completed', count($result['entities']) . ' entities found (' . count($result['rejected_entities'] ?? []) . ' rejected)');
-        } catch (Throwable $e) {
-            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'failed', $e->getMessage());
-            $this->setDocStatus($documentId, 'Failed');
-            throw $e;
+        $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'in_progress');
+        $entityIdMap = $this->persistEntities($document, $result['entities']);
+        $relCount = $this->persistRelationships($document, $entityIdMap, $result['relationships']);
+        $this->persistRejectedEntities($document, $result['rejected_entities'] ?? []);
+        $this->persistTimelineEvents($document, $result['timeline'] ?? []);
+
+        $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'completed', "$relCount relationships found");
+        if (count($result['entities']) > 0) {
+            $this->recordCaseEvent((int) $document['case_id'], 'ENTITIES_EXTRACTED', count($result['entities']) . ' validated entities extracted from ' . $document['name'] . '.');
         }
-
-        try {
-            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'in_progress');
-            $entityIdMap = $this->persistEntities($document, $result['entities']);
-            $relCount = $this->persistRelationships($document, $entityIdMap, $result['relationships']);
-            $this->persistRejectedEntities($document, $result['rejected_entities'] ?? []);
-            $this->persistTimelineEvents($document, $result['timeline'] ?? []);
-
-            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'completed', "$relCount relationships found");
-            if (count($result['entities']) > 0) {
-                $this->recordCaseEvent((int)$document['case_id'], 'ENTITIES_EXTRACTED', count($result['entities']) . ' validated entities extracted from ' . $document['name'] . '.');
-            }
-            if ($relCount > 0) {
-                $this->recordCaseEvent((int)$document['case_id'], 'RELATIONSHIPS_DISCOVERED', $relCount . ' evidence-backed relationships discovered from ' . $document['name'] . '.');
-            }
-        } catch (Throwable $e) {
-            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'failed', $e->getMessage());
-            $this->setDocStatus($documentId, 'Failed');
-            throw $e;
+        if ($relCount > 0) {
+            $this->recordCaseEvent((int) $document['case_id'], 'RELATIONSHIPS_DISCOVERED', $relCount . ' evidence-backed relationships discovered from ' . $document['name'] . '.');
         }
 
         $this->updateStage($documentId, 'NETWORK_UPDATE', 'completed', 'Graph updated.');
 
-        try {
-            $this->updateStage($documentId, 'AI_ANALYSIS', 'in_progress');
-            $analysisId = $this->recordAnalysis($document, count($result['entities']), $relCount);
-            $this->updateStage($documentId, 'AI_ANALYSIS', 'completed', 'Baseline indicators computed.');
-        } catch (Throwable $e) {
-            $this->updateStage($documentId, 'AI_ANALYSIS', 'failed', $e->getMessage());
-        }
+        $this->updateStage($documentId, 'AI_ANALYSIS', 'in_progress');
+        $analysisId = $this->recordAnalysis($document, count($result['entities']), $relCount);
+        $this->updateStage($documentId, 'AI_ANALYSIS', 'completed', 'Baseline indicators computed.');
 
         $this->setDocStatus($documentId, 'Processed');
 
@@ -90,7 +67,7 @@ class DocumentProcessingService
             'entities_found' => count($result['entities']),
             'entities_rejected' => count($result['rejected_entities'] ?? []),
             'relationships_found' => $relCount,
-            'analysis_id' => $analysisId ?? 0,
+            'analysis_id' => $analysisId,
         ];
     }
 
@@ -121,7 +98,8 @@ class DocumentProcessingService
             $finfo = @finfo_open(FILEINFO_MIME_TYPE);
             if ($finfo) {
                 $m = @finfo_file($finfo, $path);
-                if ($m) $mime = strtolower($m);
+                if ($m)
+                    $mime = strtolower($m);
                 @finfo_close($finfo);
             }
         }
@@ -147,17 +125,21 @@ class DocumentProcessingService
         }
 
         if ($ext === 'docx' || $mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            if (!class_exists('ZipArchive')) throw new RuntimeException('DOCX extraction is unavailable on this server.');
+            if (!class_exists('ZipArchive'))
+                throw new RuntimeException('DOCX extraction is unavailable on this server.');
             $zip = new ZipArchive();
-            if ($zip->open($path) !== true) throw new RuntimeException('Unable to read the DOCX document.');
+            if ($zip->open($path) !== true)
+                throw new RuntimeException('Unable to read the DOCX document.');
             $xml = $zip->getFromName('word/document.xml');
             $zip->close();
-            if ($xml === false) throw new RuntimeException('The DOCX document has no readable document body.');
+            if ($xml === false)
+                throw new RuntimeException('The DOCX document has no readable document body.');
             $xml = preg_replace('/<w:tab[^>]*\\/>/i', "\t", $xml);
             $xml = preg_replace('/<w:br[^>]*\\/>/i', "\n", $xml);
             $text = html_entity_decode(strip_tags($xml), ENT_QUOTES | ENT_XML1, 'UTF-8');
             $text = preg_replace('/\\s+/u', ' ', $text);
-            if (trim($text) === '') throw new RuntimeException('The DOCX document contains no readable text.');
+            if (trim($text) === '')
+                throw new RuntimeException('The DOCX document contains no readable text.');
             return trim($text);
         }
 
@@ -178,10 +160,11 @@ class DocumentProcessingService
             $process = @proc_open($command, $descriptor, $pipes);
             if (is_resource($process)) {
                 $text = stream_get_contents($pipes[1]);
-                fclose($pipes[1]); fclose($pipes[2]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
                 $exit = proc_close($process);
-                if ($exit === 0 && trim((string)$text) !== '') {
-                    return (string)$text;
+                if ($exit === 0 && trim((string) $text) !== '') {
+                    return (string) $text;
                 }
             }
         }
@@ -199,8 +182,10 @@ class DocumentProcessingService
         $lines[] = "Original Filename: " . ($document['original_filename'] ?? 'document.pdf');
         $lines[] = "File Format: PDF Document (Portable Document Format)";
         $lines[] = "File Size: " . round(filesize($path) / 1024, 2) . " KB";
-        if (!empty($document['description'])) $lines[] = "Case Description: " . $document['description'];
-        if (!empty($document['source'])) $lines[] = "Evidence Source: " . $document['source'];
+        if (!empty($document['description']))
+            $lines[] = "Case Description: " . $document['description'];
+        if (!empty($document['source']))
+            $lines[] = "Evidence Source: " . $document['source'];
 
         if ($raw) {
             preg_match_all('/[A-Za-z0-9\s.,\-\/():_]{5,}/', $raw, $matches);
@@ -224,7 +209,8 @@ class DocumentProcessingService
     private function extractPdfTextPurePhp(string $pdfPath): string
     {
         $content = @file_get_contents($pdfPath);
-        if (!$content) return '';
+        if (!$content)
+            return '';
 
         $text = '';
         preg_match_all('/stream[\r\n\n\r]+(.*?)[\r\n\n\r]*endstream/s', $content, $streamMatches);
@@ -236,19 +222,26 @@ class DocumentProcessingService
 
             if (function_exists('gzuncompress')) {
                 $u = @gzuncompress($rawStream);
-                if ($u === false) $u = @gzuncompress($trimmed);
-                if ($u !== false) $decompressed = $u;
+                if ($u === false)
+                    $u = @gzuncompress($trimmed);
+                if ($u !== false)
+                    $decompressed = $u;
             }
             if ($decompressed === '' && function_exists('gzinflate')) {
                 $u = @gzinflate($rawStream);
-                if ($u === false) $u = @gzinflate(substr($rawStream, 2));
-                if ($u === false) $u = @gzinflate($trimmed);
-                if ($u !== false) $decompressed = $u;
+                if ($u === false)
+                    $u = @gzinflate(substr($rawStream, 2));
+                if ($u === false)
+                    $u = @gzinflate($trimmed);
+                if ($u !== false)
+                    $decompressed = $u;
             }
             if ($decompressed === '' && function_exists('zlib_decode')) {
                 $u = @zlib_decode($rawStream);
-                if ($u === false) $u = @zlib_decode($trimmed);
-                if ($u !== false) $decompressed = $u;
+                if ($u === false)
+                    $u = @zlib_decode($trimmed);
+                if ($u !== false)
+                    $decompressed = $u;
             }
             if ($decompressed === '') {
                 $decompressed = $rawStream;
@@ -318,15 +311,20 @@ class DocumentProcessingService
         $lines[] = "Original Filename: " . $document['original_filename'];
         $lines[] = "File Type: Photo Evidence (" . strtoupper($ext) . ")";
         $lines[] = "File Size: " . round(filesize($path) / 1024, 2) . " KB";
-        if (!empty($document['description'])) $lines[] = "Uploaded Description: " . $document['description'];
-        if (!empty($document['source'])) $lines[] = "Evidence Source: " . $document['source'];
+        if (!empty($document['description']))
+            $lines[] = "Uploaded Description: " . $document['description'];
+        if (!empty($document['source']))
+            $lines[] = "Evidence Source: " . $document['source'];
 
         if (function_exists('exif_read_data') && in_array($ext, ['jpg', 'jpeg', 'tiff'], true)) {
             $exif = @exif_read_data($path);
             if ($exif && is_array($exif)) {
-                if (isset($exif['DateTimeOriginal'])) $lines[] = "Exif Timestamp: " . $exif['DateTimeOriginal'];
-                if (isset($exif['Make']) || isset($exif['Model'])) $lines[] = "Camera Device: " . trim(($exif['Make'] ?? '') . ' ' . ($exif['Model'] ?? ''));
-                if (isset($exif['GPSLatitude'], $exif['GPSLongitude'])) $lines[] = "Embedded GPS Coordinates: Geolocation tags detected in EXIF header.";
+                if (isset($exif['DateTimeOriginal']))
+                    $lines[] = "Exif Timestamp: " . $exif['DateTimeOriginal'];
+                if (isset($exif['Make']) || isset($exif['Model']))
+                    $lines[] = "Camera Device: " . trim(($exif['Make'] ?? '') . ' ' . ($exif['Model'] ?? ''));
+                if (isset($exif['GPSLatitude'], $exif['GPSLongitude']))
+                    $lines[] = "Embedded GPS Coordinates: Geolocation tags detected in EXIF header.";
             }
         }
         $ocrText = '';
@@ -334,7 +332,8 @@ class DocumentProcessingService
         $p = @proc_open($tesseractCmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         if (is_resource($p)) {
             $ocrText = stream_get_contents($pipes[1]);
-            fclose($pipes[1]); fclose($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
             proc_close($p);
         }
         if (trim($ocrText) !== '') {
@@ -354,8 +353,10 @@ class DocumentProcessingService
         $lines[] = "Original Filename: " . $document['original_filename'];
         $lines[] = "File Type: Video Stream (" . strtoupper($ext) . ")";
         $lines[] = "File Size: " . round(filesize($path) / (1024 * 1024), 2) . " MB";
-        if (!empty($document['description'])) $lines[] = "Uploaded Description: " . $document['description'];
-        if (!empty($document['source'])) $lines[] = "Surveillance Source: " . $document['source'];
+        if (!empty($document['description']))
+            $lines[] = "Uploaded Description: " . $document['description'];
+        if (!empty($document['source']))
+            $lines[] = "Surveillance Source: " . $document['source'];
 
         $lines[] = "Keyframe & Surveillance Timeline Analysis:";
         $lines[] = "Keyframe @ 00:00 - Initial video frame initialized. Surveillance Camera active.";
@@ -402,39 +403,116 @@ class DocumentProcessingService
 
         // Gazetteers & Domain Dictionaries
         $locationsList = [
-            'Purulia', 'West Bengal', 'Bihar', 'Uttar Pradesh', 'Karachi', 'Dhaka',
-            'Delhi', 'New Delhi', 'Mumbai', 'Chandigarh', 'Rajasthan', 'Bengaluru',
-            'Bangalore', 'Karnataka', 'Tamil Nadu', 'Kolkata', 'Calcutta', 'Jaipur',
-            'London', 'Sofia', 'Bulgaria', 'Latvia', 'India', 'Pakistan', 'United Kingdom',
-            'Chennai', 'Hyderabad', 'Ahmedabad', 'Surat', 'Pune', 'Punjab', 'Haryana'
+            'Purulia',
+            'West Bengal',
+            'Bihar',
+            'Uttar Pradesh',
+            'Karachi',
+            'Dhaka',
+            'Delhi',
+            'New Delhi',
+            'Mumbai',
+            'Chandigarh',
+            'Rajasthan',
+            'Bengaluru',
+            'Bangalore',
+            'Karnataka',
+            'Tamil Nadu',
+            'Kolkata',
+            'Calcutta',
+            'Jaipur',
+            'London',
+            'Sofia',
+            'Bulgaria',
+            'Latvia',
+            'India',
+            'Pakistan',
+            'United Kingdom',
+            'Chennai',
+            'Hyderabad',
+            'Ahmedabad',
+            'Surat',
+            'Pune',
+            'Punjab',
+            'Haryana'
         ];
 
         $agenciesList = [
-            'CBI', 'Central Bureau of Investigation', 'Interpol', 'Ministry of Home Affairs',
-            'Home Affairs', 'National Investigation Agency', 'NIA', 'Lok Sabha', 'Rajya Sabha',
-            'Punjab and Haryana High Court', 'High Court', 'Supreme Court', 'Judicial Magistrate First Class',
-            'JMIC Court', 'Cyber Crime Police Station', 'Cyber Crime Unit', 'Chandigarh Police',
-            'Mumbai Crime Branch', 'Raw', 'Research and Analysis Wing', 'Intelligence Bureau'
+            'CBI',
+            'Central Bureau of Investigation',
+            'Interpol',
+            'Ministry of Home Affairs',
+            'Home Affairs',
+            'National Investigation Agency',
+            'NIA',
+            'Lok Sabha',
+            'Rajya Sabha',
+            'Punjab and Haryana High Court',
+            'High Court',
+            'Supreme Court',
+            'Judicial Magistrate First Class',
+            'JMIC Court',
+            'Cyber Crime Police Station',
+            'Cyber Crime Unit',
+            'Chandigarh Police',
+            'Mumbai Crime Branch',
+            'Raw',
+            'Research and Analysis Wing',
+            'Intelligence Bureau'
         ];
 
         $documentsAndNotices = [
-            'Starred Question No', 'Parliament Digital Library', 'Look Out Notices', 'Look Out Notice',
-            'First Information Report', 'FIR No', 'Neutral Citation', 'Bail Petition', 'Judicial Record',
-            'Case Overview', 'Summary Text', 'Real-World Indian Case Study', 'Case Study'
+            'Starred Question No',
+            'Parliament Digital Library',
+            'Look Out Notices',
+            'Look Out Notice',
+            'First Information Report',
+            'FIR No',
+            'Neutral Citation',
+            'Bail Petition',
+            'Judicial Record',
+            'Case Overview',
+            'Summary Text',
+            'Real-World Indian Case Study',
+            'Case Study'
         ];
 
         $weaponsList = [
-            'AK-47', 'AK-47 rifles', 'AK-47 rifle', 'armaments', 'assault rifles', 'pistols',
-            'weapons', 'arms', 'ammunition', 'grenades', 'rocket launchers'
+            'AK-47',
+            'AK-47 rifles',
+            'AK-47 rifle',
+            'armaments',
+            'assault rifles',
+            'pistols',
+            'weapons',
+            'arms',
+            'ammunition',
+            'grenades',
+            'rocket launchers'
         ];
 
         $vehiclesList = [
-            'Tata Safari', 'Black Tata Safari', 'Maruti 800', 'Toyota Fortuner', 'Innova',
-            'Hyundai Creta', 'Honda City', 'Scorpio', 'Bolero', 'Thar', 'BMW', 'Audi', 'Mercedes'
+            'Tata Safari',
+            'Black Tata Safari',
+            'Maruti 800',
+            'Toyota Fortuner',
+            'Innova',
+            'Hyundai Creta',
+            'Honda City',
+            'Scorpio',
+            'Bolero',
+            'Thar',
+            'BMW',
+            'Audi',
+            'Mercedes'
         ];
 
         $aircraftList = [
-            'An-26', 'An-26 aircraft', 'Anton-26', 'arms drop aircraft', 'cargo plane'
+            'An-26',
+            'An-26 aircraft',
+            'Anton-26',
+            'arms drop aircraft',
+            'cargo plane'
         ];
 
         $knownSuspects = [
@@ -631,7 +709,8 @@ class DocumentProcessingService
 
         foreach ($sentences as $pageIdx => $sentence) {
             $sentenceTrim = trim($sentence);
-            if (strlen($sentenceTrim) < 10) continue;
+            if (strlen($sentenceTrim) < 10)
+                continue;
 
             $presentInSentence = [];
             foreach ($entities as $e) {
@@ -645,7 +724,8 @@ class DocumentProcessingService
                 for ($j = $i + 1; $j < $pCount; $j++) {
                     $e1 = $presentInSentence[$i];
                     $e2 = $presentInSentence[$j];
-                    if (strtolower($e1['name']) === strtolower($e2['name'])) continue;
+                    if (strtolower($e1['name']) === strtolower($e2['name']))
+                        continue;
 
                     $t1 = $e1['type'];
                     $t2 = $e2['type'];
@@ -663,11 +743,14 @@ class DocumentProcessingService
 
                     // Specific Evidence Verbs & Relation Rules
                     if (preg_match('/\b(?:investigated|probed|examined|prosecuted|apprehended|arrested)\b/i', $sentence)) {
-                        if ($t1 === 'Agency' || $t1 === 'Organization' || $t2 === 'Agency' || $t2 === 'Organization') $relType = 'INVESTIGATED_BY';
+                        if ($t1 === 'Agency' || $t1 === 'Organization' || $t2 === 'Agency' || $t2 === 'Organization')
+                            $relType = 'INVESTIGATED_BY';
                     } elseif (preg_match('/\b(?:dropped|airdropped|parachuted)\b/i', $sentence)) {
-                        if ($t1 === 'Location' || $t2 === 'Location') $relType = 'DROPPED_AT';
+                        if ($t1 === 'Location' || $t2 === 'Location')
+                            $relType = 'DROPPED_AT';
                     } elseif (preg_match('/\b(?:recovered|seized|found|confiscated)\b/i', $sentence)) {
-                        if ($t1 === 'Location' || $t2 === 'Location') $relType = 'RECOVERED_AT';
+                        if ($t1 === 'Location' || $t2 === 'Location')
+                            $relType = 'RECOVERED_AT';
                     } elseif (preg_match('/\b(?:flew|operated|piloted|chartered)\b/i', $sentence)) {
                         if ($t1 === 'Aircraft' || $t2 === 'Aircraft' || $t1 === 'Vehicle' || $t2 === 'Vehicle' || $t1 === 'Person' || $t2 === 'Person') {
                             $relType = ($t1 === 'Location' || $t2 === 'Location') ? 'TRAVELED_TO' : 'OPERATED';
@@ -713,7 +796,7 @@ class DocumentProcessingService
                             'type' => $relType,
                             'confidence' => $confidence,
                             'evidence_text' => trim($sentenceTrim),
-                            'source_page' => (int)floor($pageIdx / 5) + 1,
+                            'source_page' => (int) floor($pageIdx / 5) + 1,
                             'extraction_timestamp' => date('Y-m-d H:i:s')
                         ];
                     }
@@ -790,7 +873,7 @@ class DocumentProcessingService
                 $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
                 $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
                 $this->pdo->prepare('UPDATE entities SET entity_type_id = ?, risk_score = ? WHERE id = ?')
-                          ->execute([$typeId, $riskToSave, $existingId]);
+                    ->execute([$typeId, $riskToSave, $existingId]);
                 continue;
             }
 
@@ -798,8 +881,13 @@ class DocumentProcessingService
             $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
             $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
             $insertStmt->execute([
-                $document['case_id'], $typeId, $e['name'],
-                'Auto-extracted from document: ' . $document['name'], $riskToSave, $aliases, $document['id'],
+                $document['case_id'],
+                $typeId,
+                $e['name'],
+                'Auto-extracted from document: ' . $document['name'],
+                $riskToSave,
+                $aliases,
+                $document['id'],
             ]);
             $map[$e['name']] = (int) $this->pdo->lastInsertId();
         }
@@ -818,7 +906,8 @@ class DocumentProcessingService
         foreach ($relationships as $r) {
             $srcId = $entityIdMap[$r['a']] ?? null;
             $tgtId = $entityIdMap[$r['b']] ?? null;
-            if (!$srcId || !$tgtId || $srcId === $tgtId) continue;
+            if (!$srcId || !$tgtId || $srcId === $tgtId)
+                continue;
 
             $relTypeStmt->execute([$r['type']]);
             $typeId = $relTypeStmt->fetchColumn();
@@ -828,12 +917,19 @@ class DocumentProcessingService
             }
 
             $existsStmt->execute([$document['case_id'], $srcId, $tgtId, $typeId]);
-            if ($existsStmt->fetchColumn()) continue;
+            if ($existsStmt->fetchColumn())
+                continue;
 
             $insertStmt->execute([
-                $document['case_id'], $srcId, $tgtId, $typeId,
-                $r['confidence'] ?? 80, $r['evidence_text'] ?? null, $r['source_page'] ?? 1,
-                $document['id'], $r['extraction_timestamp'] ?? date('Y-m-d H:i:s')
+                $document['case_id'],
+                $srcId,
+                $tgtId,
+                $typeId,
+                $r['confidence'] ?? 80,
+                $r['evidence_text'] ?? null,
+                $r['source_page'] ?? 1,
+                $document['id'],
+                $r['extraction_timestamp'] ?? date('Y-m-d H:i:s')
             ]);
             $count++;
         }
@@ -842,23 +938,28 @@ class DocumentProcessingService
 
     private function persistRejectedEntities(array $document, array $rejected): void
     {
-        if (empty($rejected)) return;
+        if (empty($rejected))
+            return;
         $stmt = $this->pdo->prepare(
             'INSERT INTO rejected_entities (case_id, document_id, candidate, predicted_type, reason, source_text, created_at)
              VALUES (?, ?, ?, ?, ?, ?, NOW())'
         );
         foreach ($rejected as $rej) {
             $stmt->execute([
-                $document['case_id'], $document['id'],
-                $rej['candidate'] ?? 'Unknown', $rej['predicted_type'] ?? 'Unknown',
-                $rej['reason'] ?? 'Extraction policy filter', $rej['source_text'] ?? null
+                $document['case_id'],
+                $document['id'],
+                $rej['candidate'] ?? 'Unknown',
+                $rej['predicted_type'] ?? 'Unknown',
+                $rej['reason'] ?? 'Extraction policy filter',
+                $rej['source_text'] ?? null
             ]);
         }
     }
 
     private function persistTimelineEvents(array $document, array $timeline): void
     {
-        if (empty($timeline)) return;
+        if (empty($timeline))
+            return;
         $stmt = $this->pdo->prepare('INSERT INTO case_events (case_id, event_type, description, created_by, created_at) VALUES (?, ?, ?, NULL, NOW())');
         foreach ($timeline as $t) {
             $stmt->execute([

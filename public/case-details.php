@@ -88,6 +88,9 @@ function priorityClass($p) { return 'priority-' . strtolower($p); }
           <i class="fa-solid fa-magnifying-glass"></i>
           <input type="text" id="cgGraphSearch" placeholder="Search node name...">
         </div>
+        <select id="cgGraphDocFilter" class="cg-form-select cg-btn-sm" style="width:220px">
+          <option value="0">All Documents (Master Network)</option>
+        </select>
         <select id="cgGraphTypeFilter" class="cg-form-select cg-btn-sm" style="width:170px"><option value="">All Entity Types</option></select>
         <select id="cgGraphLayoutSelect" class="cg-form-select cg-btn-sm" style="width:180px">
           <option value="force">Force Directed (Default)</option>

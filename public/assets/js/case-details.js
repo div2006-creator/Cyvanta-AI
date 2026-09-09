@@ -199,11 +199,39 @@
     'MET_WITH': '#60a5fa'
   };
 
+  async function updateDocFilterOptions() {
+    const docFilter = document.getElementById('cgGraphDocFilter');
+    if (!docFilter) return;
+    const currentVal = docFilter.value || '0';
+    try {
+      const res = await cgApi(`/api/documents/list.php?case_id=${caseId}`);
+      if (res.success && res.data && res.data.items) {
+        let html = '<option value="0">All Documents (Master Network)</option>';
+        res.data.items.forEach(d => {
+          const safeName = (d.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<option value="${d.id}">${safeName}</option>`;
+        });
+        docFilter.innerHTML = html;
+        if ([...docFilter.options].some(opt => opt.value === currentVal)) {
+          docFilter.value = currentVal;
+        } else {
+          docFilter.value = '0';
+        }
+      }
+    } catch (e) {}
+  }
+
   async function loadGraph() {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js');
+    await updateDocFilterOptions();
+
+    const docFilter = document.getElementById('cgGraphDocFilter');
+    const selectedDocId = docFilter ? (parseInt(docFilter.value, 10) || 0) : 0;
+    const docParam = selectedDocId > 0 ? `&document_id=${selectedDocId}` : '';
+
     const [entitiesRes, relsRes] = await Promise.all([
-      cgApi(`/api/entities/list.php?case_id=${caseId}`),
-      cgApi(`/api/relationships/list.php?case_id=${caseId}`),
+      cgApi(`/api/entities/list.php?case_id=${caseId}${docParam}`),
+      cgApi(`/api/relationships/list.php?case_id=${caseId}${docParam}`),
     ]);
     if (!entitiesRes.success || !relsRes.success) return;
 
@@ -213,14 +241,17 @@
     entities.forEach(e => entityMeta[e.id] = e);
 
     const typeFilter = document.getElementById('cgGraphTypeFilter');
-    if (typeFilter && !typeFilter.dataset.loaded) {
+    if (typeFilter) {
+      const currentType = typeFilter.value || '';
       const types = [...new Set(entities.map(e => e.type_name))];
       typeFilter.innerHTML = '<option value="">All Entity Types</option>' + types.map(t => `<option value="${t}">${t}</option>`).join('');
-      typeFilter.dataset.loaded = '1';
+      if (types.includes(currentType)) {
+        typeFilter.value = currentType;
+      }
     }
 
     if (entities.length === 0) {
-      document.getElementById('cgNetworkGraph').innerHTML = '<div class="cg-empty-state pt-5"><i class="fa-solid fa-circle-nodes"></i>No entities yet — upload and process a document to build the network.</div>';
+      document.getElementById('cgNetworkGraph').innerHTML = '<div class="cg-empty-state pt-5"><i class="fa-solid fa-circle-nodes"></i>No entities found for this document — upload and process a document to build the network.</div>';
       return;
     }
 
@@ -434,6 +465,10 @@
       network.focus(match.id, { scale: 1.3, animation: true });
       showEntityPanel(match.id);
     }
+  });
+
+  document.getElementById('cgGraphDocFilter')?.addEventListener('change', function () {
+    loadGraph();
   });
 
   document.getElementById('cgGraphTypeFilter')?.addEventListener('change', function () {

@@ -69,7 +69,19 @@ try {
 
     // 2. Cascade cleanup database records tied to this document
     $pdo->prepare('DELETE FROM relationships WHERE source_document_id = ?')->execute([$documentId]);
-    $pdo->prepare('DELETE FROM entities WHERE source_document_id = ?')->execute([$documentId]);
+    
+    // Delete entities originating from this document that NO LONGER have any relationships in this case
+    $pdo->prepare('
+        DELETE FROM entities 
+        WHERE case_id = ? 
+          AND (source_document_id = ? OR source_document_id IS NULL)
+          AND id NOT IN (
+              SELECT source_entity_id FROM relationships WHERE case_id = ?
+              UNION
+              SELECT target_entity_id FROM relationships WHERE case_id = ?
+          )
+    ')->execute([$caseId, $documentId, $caseId, $caseId]);
+
     $pdo->prepare('DELETE FROM rejected_entities WHERE document_id = ?')->execute([$documentId]);
     $pdo->prepare('DELETE FROM document_processing WHERE document_id = ?')->execute([$documentId]);
     $pdo->prepare('DELETE FROM ai_analyses WHERE document_id = ?')->execute([$documentId]);
