@@ -705,8 +705,9 @@
           cgToast(res.message||'Document uploaded successfully. Starting network analysis…','success');
           const modal=bootstrap.Modal.getInstance(document.getElementById('cgDocModal'));if(modal)modal.hide();
           docForm.reset();loaded.documents=false;loaded.overview=false;await loadDocuments();loadSnapshot();
-          if (res.data && res.data.id) {
-            window.cgProcessDocument(res.data.id);
+          const newDocId = res.data ? (res.data.document_id || res.data.id) : null;
+          if (newDocId) {
+            window.cgProcessDocument(newDocId);
           }
         }else cgToast(res.message||'Unable to upload the document.','error');
       }catch(e){console.error(e);cgToast('Unable to upload the document.','error');}

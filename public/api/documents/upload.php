@@ -66,7 +66,7 @@ try {
     $s=$pdo->prepare('SELECT case_number FROM cases WHERE id=?');$s->execute([$caseId]);$caseNumber=(string)$s->fetchColumn();
     cg_log_audit($user['id'],'DOCUMENT_UPLOADED','documents',$caseNumber,'success',"Uploaded $name");
     cg_create_notification(null,'document','Document Uploaded',"$name uploaded to $caseNumber.","case-details.php?id=$caseId");
-    cg_json_success('Document uploaded successfully.',['document_id'=>$documentId,'status'=>'Uploaded']);
+    cg_json_success('Document uploaded successfully.',['id'=>$documentId,'document_id'=>$documentId,'status'=>'Uploaded']);
 } catch(Throwable $e) {
     error_log('[CYVANTA] document upload failed: '.$e->getMessage());
     cg_json_error('Unable to upload the document.',500);
