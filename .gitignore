@@ -1,5 +1,8 @@
 .env
 storage/uploads/*
 !storage/uploads/.gitkeep
+database/*.sqlite
+database/*.sqlite-journal
+database/*.db
 scratch/
 *.log
