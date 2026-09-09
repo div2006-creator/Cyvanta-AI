@@ -21,4 +21,9 @@ $rels = $pdo->prepare(
 );
 $rels->execute([$id, $id, $id, $id]);
 
+$rInfo = cg_calculate_risk_level($entity['risk_score'], $entity['type_name'], $entity['name'], $entity['description']);
+$entity['is_risk_eligible'] = $rInfo['is_eligible'];
+$entity['risk_score_display'] = $rInfo['score_display'];
+$entity['risk_level_display'] = $rInfo['level_display'];
+
 cg_json_success('', ['entity' => $entity, 'relationships' => $rels->fetchAll()]);

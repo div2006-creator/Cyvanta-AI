@@ -15,6 +15,45 @@
   }
   window.cgToast = toast;
 
+  window.cgFormatRisk = function (riskScore, typeName, name, description) {
+    const typeClean = (typeName || '').trim().toLowerCase();
+    let isEligible = typeClean === 'person' && riskScore !== null && riskScore !== undefined && riskScore !== '';
+
+    if (isEligible) {
+      const text = ((name || '') + ' ' + (description || '')).toLowerCase();
+      if (text.match(/\b(victim|deceased|witness|eyewitness|judge|justice|advocate|lawyer|counsel|prosecutor|investigator|officer)\b/i)) {
+        if (!text.match(/\b(accused|suspect|prime suspect|involved|co-accused|conspirator|mastermind)\b/i)) {
+          isEligible = false;
+        }
+      }
+    }
+
+    if (!isEligible) {
+      return {
+        isEligible: false,
+        score: null,
+        scoreText: 'N/A',
+        levelText: 'Not Applicable',
+        badgeClass: 'priority-low bg-secondary text-white'
+      };
+    }
+
+    const s = parseInt(riskScore, 10);
+    let level = 'LOW';
+    let badgeClass = 'priority-low';
+    if (s > 80) { level = 'CRITICAL'; badgeClass = 'priority-critical'; }
+    else if (s > 60) { level = 'HIGH'; badgeClass = 'priority-high'; }
+    else if (s > 30) { level = 'MEDIUM'; badgeClass = 'priority-medium'; }
+
+    return {
+      isEligible: true,
+      score: s,
+      scoreText: `${s}%`,
+      levelText: level,
+      badgeClass: badgeClass
+    };
+  };
+
   async function api(path, options = {}) {
     const opts = Object.assign({ headers: {} }, options);
     opts.headers = Object.assign({}, opts.headers);

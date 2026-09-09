@@ -224,14 +224,16 @@
 
     allNodes = new vis.DataSet(entities.map(e => {
       const mainColor = TYPE_COLOR_MAP[e.type_name] || e.color || '#0284c7';
-      const isHighRisk = e.risk_score >= 70;
-      const borderColor = isHighRisk ? '#dc2626' : (e.risk_score >= 40 ? '#d97706' : '#0284c7');
+      const rInfo = (window.cgFormatRisk ? window.cgFormatRisk(e.risk_score, e.type_name, e.name, e.description) : { isEligible: false, scoreText: 'N/A' });
+      const isHighRisk = rInfo.isEligible && rInfo.score >= 70;
+      const borderColor = isHighRisk ? '#dc2626' : (rInfo.isEligible && rInfo.score >= 40 ? '#d97706' : mainColor);
       const borderWidth = isHighRisk ? 4 : 2;
+      const riskTitle = rInfo.isEligible ? `${rInfo.score}% (${rInfo.levelText})` : 'N/A';
 
       return {
         id: e.id,
         label: `${e.name}\n[${e.type_name}]`,
-        title: `<strong>${e.name}</strong><br>Type: ${e.type_name}<br>Risk Score: <strong>${e.risk_score}%</strong><br>Connections: ${e.connections}`,
+        title: `<strong>${e.name}</strong><br>Type: ${e.type_name}<br>Risk Score: <strong>${riskTitle}</strong><br>Connections: ${e.connections}`,
         color: {
           background: mainColor,
           border: borderColor,
@@ -402,6 +404,7 @@
     const e = data.data.entity;
     const rels = data.data.relationships;
     const panel = document.getElementById('cgGraphSidePanel');
+    const rInfo = (window.cgFormatRisk ? window.cgFormatRisk(e.risk_score, e.type_name, e.name, e.description) : { isEligible: false, scoreText: 'N/A', levelText: 'Not Applicable' });
     panel.classList.add('show');
     panel.innerHTML = `
       <div class="d-flex justify-content-between align-items-start mb-2">
@@ -409,7 +412,8 @@
         <button class="btn-close" onclick="document.getElementById('cgGraphSidePanel').classList.remove('show')"></button>
       </div>
       <div class="small text-muted mb-1">Type: <span class="fw-700 text-dark">${e.type_name}</span></div>
-      <div class="small text-muted mb-1">Risk Score: <span class="fw-800 ${e.risk_score >= 70 ? 'text-danger' : e.risk_score >= 40 ? 'text-warning' : 'text-success'}">${e.risk_score}%</span></div>
+      <div class="small text-muted mb-1">Risk Score: <span class="fw-800 ${rInfo.isEligible ? (rInfo.score >= 70 ? 'text-danger' : rInfo.score >= 40 ? 'text-warning' : 'text-success') : 'text-secondary'}">${rInfo.scoreText}</span></div>
+      <div class="small text-muted mb-2">Risk Level: <span class="badge ${rInfo.badgeClass}">${rInfo.levelText}</span></div>
       <div class="small text-muted mb-3">Connections: <span class="fw-700 text-dark">${rels.length}</span></div>
       <div class="fw-700 text-dark small mb-2 border-bottom pb-1">Network Connections</div>
       ${rels.map(r => `<div class="small py-1 border-bottom" style="border-color:var(--cg-border-soft)!important">
@@ -520,10 +524,13 @@
     const empty = document.getElementById('cgEntitiesEmpty');
     if (!data.success || !data.data.items.length) { tbody.innerHTML = ''; empty.hidden = false; return; }
     empty.hidden = true;
-    tbody.innerHTML = data.data.items.map(e => `
+    tbody.innerHTML = data.data.items.map(e => {
+      const rInfo = (window.cgFormatRisk ? window.cgFormatRisk(e.risk_score, e.type_name, e.name, e.description) : { isEligible: false, scoreText: 'N/A', badgeClass: 'priority-low bg-secondary text-white' });
+      return `
       <tr><td class="fw-600 text-white">${e.name}</td><td>${e.type_name}</td>
-      <td><span class="cg-priority ${e.risk_score >= 70 ? 'priority-critical' : e.risk_score >= 40 ? 'priority-high' : 'priority-low'}">${e.risk_score}%</span></td>
-      <td>${e.connections}</td><td class="text-muted small">${e.description || '—'}</td></tr>`).join('');
+      <td><span class="cg-priority ${rInfo.badgeClass}">${rInfo.scoreText}</span></td>
+      <td>${e.connections}</td><td class="text-muted small">${e.description || '—'}</td></tr>`;
+    }).join('');
   }
 
   // ---------- Documents tab ----------

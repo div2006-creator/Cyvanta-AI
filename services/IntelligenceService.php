@@ -489,7 +489,8 @@ class IntelligenceService
 
             $eType = strtolower(trim($ent['type'] ?? 'person'));
             $typeId = $typeMap[$eType] ?? $defaultTypeId;
-            $risk = max(10, min(99, (int) ($ent['risk'] ?? 75)));
+            $isEligible = cg_is_entity_risk_eligible($ent['type'] ?? 'Person', $eName, '');
+            $riskToSave = $isEligible ? max(10, min(99, (int) ($ent['risk'] ?? 75))) : -1;
 
             // Find existing entity or insert
             $chkE = $this->pdo->prepare("SELECT id FROM entities WHERE case_id = ? AND name = ?");
@@ -498,13 +499,17 @@ class IntelligenceService
 
             if ($existingId) {
                 $entityIdMap[$eName] = (int) $existingId;
-                $this->pdo->prepare("UPDATE entities SET risk_score = MAX(risk_score, ?), updated_at = NOW() WHERE id = ?")->execute([$risk, $existingId]);
+                if ($isEligible) {
+                    $this->pdo->prepare("UPDATE entities SET risk_score = MAX(COALESCE(risk_score, 0), ?), updated_at = NOW() WHERE id = ?")->execute([$riskToSave, $existingId]);
+                } else {
+                    $this->pdo->prepare("UPDATE entities SET risk_score = -1, updated_at = NOW() WHERE id = ?")->execute([$existingId]);
+                }
             } else {
                 $insE = $this->pdo->prepare("
                     INSERT INTO entities (case_id, entity_type_id, name, description, risk_score, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, NOW(), NOW())
                 ");
-                $insE->execute([$caseId, $typeId, $eName, "Ingested via Intelligence Event #{$eventId}", $risk]);
+                $insE->execute([$caseId, $typeId, $eName, "Ingested via Intelligence Event #{$eventId}", $riskToSave]);
                 $entityIdMap[$eName] = (int) $this->pdo->lastInsertId();
             }
         }

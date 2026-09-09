@@ -37,6 +37,14 @@ try {
     $stmt->execute([$caseId]);
     $entities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    foreach ($entities as &$ent) {
+        $rInfo = cg_calculate_risk_level($ent['risk_score'], $ent['type_name'], $ent['name'], $ent['description']);
+        $ent['is_risk_eligible'] = $rInfo['is_eligible'];
+        $ent['risk_score_display'] = $rInfo['score_display'];
+        $ent['risk_level_display'] = $rInfo['level_display'];
+    }
+    unset($ent);
+
     // Group entities by category
     $keyPersons = array_filter($entities, fn($e) => $e['type_name'] === 'Person');
     $orgsAgencies = array_filter($entities, fn($e) => in_array($e['type_name'], ['Organization', 'Agency'], true));

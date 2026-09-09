@@ -742,9 +742,11 @@ class DocumentProcessingService
             }
 
             $aliases = $e['possible_aliases'] ?? null;
+            $isEligible = cg_is_entity_risk_eligible($e['type'] ?? 'Person', $e['name'], '');
+            $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
             $insertStmt->execute([
                 $document['case_id'], $typeId, $e['name'],
-                'Auto-extracted from document: ' . $document['name'], $e['risk'] ?? 20, $aliases, $document['id'],
+                'Auto-extracted from document: ' . $document['name'], $riskToSave, $aliases, $document['id'],
             ]);
             $map[$e['name']] = (int) $this->pdo->lastInsertId();
         }

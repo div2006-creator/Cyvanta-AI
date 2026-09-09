@@ -4,6 +4,13 @@ cg_require_login();
 $caseId = (int) ($_GET['case_id'] ?? 0);
 $pdo = Database::connect();
 
+if ($caseId > 0) {
+    try {
+        $analyzer = new AnalysisService($pdo);
+        $analyzer->runForCase($caseId);
+    } catch (Throwable $e) {}
+}
+
 $stmt = $pdo->prepare(
     "SELECT e.*, et.name AS type_name, et.icon, et.color,
      (SELECT COUNT(*) FROM relationships r WHERE r.source_entity_id = e.id OR r.target_entity_id = e.id) AS connections
@@ -11,4 +18,14 @@ $stmt = $pdo->prepare(
      WHERE e.case_id = ? ORDER BY connections DESC"
 );
 $stmt->execute([$caseId]);
-cg_json_success('', ['items' => $stmt->fetchAll()]);
+$items = $stmt->fetchAll();
+
+foreach ($items as &$e) {
+    $rInfo = cg_calculate_risk_level($e['risk_score'], $e['type_name'], $e['name'], $e['description']);
+    $e['is_risk_eligible'] = $rInfo['is_eligible'];
+    $e['risk_score_display'] = $rInfo['score_display'];
+    $e['risk_level_display'] = $rInfo['level_display'];
+}
+unset($e);
+
+cg_json_success('', ['items' => $items]);

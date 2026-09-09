@@ -139,3 +139,61 @@ function cg_user_can_access_case(int $caseId, ?array $user = null): bool
     $stmt->execute([$caseId, $user['id'], $user['id'], $user['id']]);
     return (bool)$stmt->fetchColumn();
 }
+
+/** Check if an entity is eligible for a numerical risk score (Person Accused/Suspect/Involved only) */
+function cg_is_entity_risk_eligible(string $typeName, string $name = '', ?string $description = ''): bool
+{
+    $typeClean = trim(strtolower($typeName));
+    if ($typeClean !== 'person') {
+        return false;
+    }
+
+    $text = strtolower($name . ' ' . ($description ?? ''));
+    if (preg_match('/\b(victim|deceased|witness|eyewitness|judge|justice|advocate|lawyer|counsel|prosecutor|investigator|officer)\b/i', $text)) {
+        if (!preg_match('/\b(accused|suspect|prime suspect|involved|co-accused|conspirator|mastermind)\b/i', $text)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** Get formatted risk score, level, and badge CSS class */
+function cg_calculate_risk_level($riskScore, string $typeName = 'Person', string $name = '', ?string $description = ''): array
+{
+    $isEligible = cg_is_entity_risk_eligible($typeName, $name, $description) && $riskScore !== null && $riskScore !== '';
+
+    if (!$isEligible) {
+        return [
+            'is_eligible' => false,
+            'score' => null,
+            'score_display' => 'N/A',
+            'level_display' => 'Not Applicable',
+            'level_class' => 'priority-low bg-secondary text-white'
+        ];
+    }
+
+    $score = (int) $riskScore;
+    if ($score > 80) {
+        $level = 'CRITICAL';
+        $class = 'priority-critical';
+    } elseif ($score > 60) {
+        $level = 'HIGH';
+        $class = 'priority-high';
+    } elseif ($score > 30) {
+        $level = 'MEDIUM';
+        $class = 'priority-medium';
+    } else {
+        $level = 'LOW';
+        $class = 'priority-low';
+    }
+
+    return [
+        'is_eligible' => true,
+        'score' => $score,
+        'score_display' => $score . '%',
+        'level_display' => $level,
+        'level_class' => $class
+    ];
+}
+

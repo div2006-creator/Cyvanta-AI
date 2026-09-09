@@ -61,7 +61,7 @@ class AnalysisService
 
         // Bridge Entity candidate: connects to entities that are not otherwise connected to each other
         foreach ($adjacency as $entityId => $neighbors) {
-            $neighbors = array_unique($neighbors);
+            $neighbors = array_values(array_unique($neighbors));
             if (count($neighbors) < 2) continue;
             $interconnected = 0;
             $pairs = 0;
@@ -115,10 +115,73 @@ class AnalysisService
             $insert->execute([$analysisId, $r['pattern_type'], is_numeric($r['entity_id']) ? $r['entity_id'] : null, $r['confidence'], $r['reason']]);
         }
 
-        // Also update risk_score on top hub entities as an explainable indicator
-        foreach (array_slice($degree, 0, 5, true) as $entityId => $conn) {
-            $riskScore = min(98, 20 + $conn * 8);
-            $this->pdo->prepare('UPDATE entities SET risk_score = ? WHERE id = ?')->execute([$riskScore, $entityId]);
+        // Recalculate Risk Scores strictly for risk-eligible entities (Person Accused/Suspect/Involved only)
+        // All non-eligible entities (Courts, Police Agencies, Locations, Vehicles, Weapons, etc.) get risk_score = NULL.
+        $fullEntitiesStmt = $this->pdo->prepare('
+            SELECT e.id, e.name, e.description, et.name AS type_name
+            FROM entities e
+            JOIN entity_types et ON et.id = e.entity_type_id
+            WHERE e.case_id = ?
+        ');
+        $fullEntitiesStmt->execute([$caseId]);
+        $fullEntities = $fullEntitiesStmt->fetchAll();
+
+        $relsFullStmt = $this->pdo->prepare('
+            SELECT r.source_entity_id, r.target_entity_id, rt.name AS rel_type
+            FROM relationships r
+            JOIN relationship_types rt ON rt.id = r.relationship_type_id
+            WHERE r.case_id = ?
+        ');
+        $relsFullStmt->execute([$caseId]);
+        $relsFull = $relsFullStmt->fetchAll();
+
+        $relWeights = [
+            'ACCUSED_IN' => 10, 'PRIME_SUSPECT_IN' => 10, 'CHARGESHEETED_IN' => 10,
+            'SUSPECTED_IN' => 9, 'SUSPECT_OF' => 9,
+            'INVOLVED_IN' => 8, 'MASTERMIND_OF' => 8, 'CO_CONSPIRATOR' => 8,
+            'OPERATES' => 7, 'CONTROLS' => 7, 'WIRED_FUNDS' => 7, 'LOGISTICS_LEAD' => 7,
+            'LINKED_TO_CASE' => 6, 'ASSOCIATED_WITH' => 6, 'ASSOCIATE_OF' => 6,
+            'CONNECTED_TO' => 4, 'CALLS' => 4, 'TRANSFERRED_TO' => 4,
+            'WITNESS_IN' => 2, 'PRESENT_AT' => 2,
+            'HEARD_BY' => 0, 'APPEALED_TO' => 0, 'INVESTIGATED_BY' => 0,
+            'LOCATED_IN' => 0, 'JURISDICTION_OF' => 0, 'PART_OF' => 0,
+            'MENTIONED_IN' => 0, 'ROUTED_THROUGH' => 0
+        ];
+
+        $updateRiskStmt = $this->pdo->prepare('UPDATE entities SET risk_score = ? WHERE id = ?');
+
+        foreach ($fullEntities as $ent) {
+            $eId = (int) $ent['id'];
+            $typeName = $ent['type_name'];
+            $name = $ent['name'];
+            $desc = $ent['description'] ?? '';
+
+            if (!cg_is_entity_risk_eligible($typeName, $name, $desc)) {
+                $updateRiskStmt->execute([-1, $eId]);
+                continue;
+            }
+
+            $rawScore = 0;
+            $textLower = strtolower($name . ' ' . $desc);
+
+            if (preg_match('/\b(accused|prime suspect|mastermind|co-conspirator)\b/i', $textLower)) {
+                $rawScore += 35;
+            } elseif (preg_match('/\b(suspect)\b/i', $textLower)) {
+                $rawScore += 25;
+            } elseif (preg_match('/\b(involved)\b/i', $textLower)) {
+                $rawScore += 15;
+            }
+
+            foreach ($relsFull as $r) {
+                if ($r['source_entity_id'] == $eId || $r['target_entity_id'] == $eId) {
+                    $relType = strtoupper(trim($r['rel_type'] ?? ''));
+                    $w = $relWeights[$relType] ?? 3;
+                    $rawScore += $w;
+                }
+            }
+
+            $finalRisk = min(98, max(15, (int) round($rawScore * 1.5)));
+            $updateRiskStmt->execute([$finalRisk, $eId]);
         }
 
         return [

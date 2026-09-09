@@ -19,5 +19,13 @@ $stmt = $pdo->prepare(
 $stmt->execute($params);
 $items = $stmt->fetchAll();
 
+foreach ($items as &$e) {
+    $rInfo = cg_calculate_risk_level($e['risk_score'], $e['type_name'], $e['name'], $e['description']);
+    $e['is_risk_eligible'] = $rInfo['is_eligible'];
+    $e['risk_score_display'] = $rInfo['score_display'];
+    $e['risk_level_display'] = $rInfo['level_display'];
+}
+unset($e);
+
 $types = $pdo->query('SELECT name FROM entity_types ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
 cg_json_success('', ['items' => $items, 'types' => $types]);
