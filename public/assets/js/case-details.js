@@ -633,7 +633,7 @@
     activateTab('network');
     const docFilter = document.getElementById('cgGraphDocFilter');
     if (docFilter) {
-      docFilter.value = String(documentId);
+      docFilter.value = '0';
     }
     await loadGraph();
   };
@@ -685,7 +685,7 @@
         activateTab('network');
         const docFilter = document.getElementById('cgGraphDocFilter');
         if (docFilter) {
-          docFilter.value = String(documentId);
+          docFilter.value = '0';
         }
         await loadGraph();
         if(document.querySelector('.cg-tab.active')?.dataset.tab==='entities')loadEntities();

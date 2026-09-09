@@ -59,6 +59,16 @@ class DocumentProcessingService
 
         $this->updateStage($documentId, 'AI_ANALYSIS', 'in_progress');
         $analysisId = $this->recordAnalysis($document, count($result['entities']), $relCount);
+
+        // Automatically compute full case-wide entity analysis & risk scoring across all case documents
+        try {
+            require_once __DIR__ . '/AnalysisService.php';
+            $analyzer = new AnalysisService($this->pdo);
+            $analyzer->runForCase((int) $document['case_id']);
+        } catch (Throwable $e) {
+            error_log('[CYVANTA] AnalysisService runForCase error during document processing: ' . $e->getMessage());
+        }
+
         $this->updateStage($documentId, 'AI_ANALYSIS', 'completed', 'Baseline indicators computed.');
 
         $this->setDocStatus($documentId, 'Processed');
@@ -659,13 +669,13 @@ class DocumentProcessingService
                     $determinedType = cg_determine_entity_type($nameCandidate);
 
                     if ($determinedType !== 'Person') {
-                        if (!in_array($determinedType, ['Document', 'Organization'], true) || preg_match('/\b(tata|safari|maruti|toyota|honda|court|police|cbi|hospital|bank)\b/i', $nameCandidate)) {
+                        if ($determinedType !== 'Document') {
                             $rawCandidates[] = ['name' => $nameCandidate, 'type' => $determinedType, 'risk' => -1, 'confidence' => 90];
                         } else {
                             $rejectedEntities[] = [
                                 'candidate' => $nameCandidate,
                                 'predicted_type' => 'Person',
-                                'reason' => "Non-person token reclassified as $determinedType and excluded from Person list.",
+                                'reason' => "Non-person document token reclassified as $determinedType and excluded.",
                                 'source_text' => 'Semantic check: ' . $nameCandidate
                             ];
                         }
