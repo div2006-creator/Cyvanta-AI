@@ -69,7 +69,7 @@ if (cg_is_logged_in()) {
     <?php
     $caps = [
       ['fa-folder-open', 'Case Management', 'Create, assign, prioritize and track investigations end-to-end.'],
-      ['fa-users-viewfinest'=>'fa-users-viewfinder', 'Entity Extraction', 'Identify people, organizations, vehicles and locations from documents.'],
+      ['fa-users-viewfinder', 'Entity Extraction', 'Identify people, organizations, vehicles and locations from documents.'],
       ['fa-diagram-project', 'Graph Intelligence', 'Interactive, explorable network visualization for every case.'],
       ['fa-brain', 'AI/NLP-Ready Analysis', 'Modular analysis layer ready for real NLP models.'],
       ['fa-bell', 'Real-Time Intelligence', 'Live notifications for processing, assignments and alerts.'],
