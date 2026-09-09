@@ -148,6 +148,14 @@ class AnalysisService
             'MENTIONED_IN' => 0, 'ROUTED_THROUGH' => 0
         ];
 
+        // Load Entity Type IDs Map
+        $allTypesStmt = $this->pdo->query('SELECT id, name FROM entity_types');
+        $typeIdByName = [];
+        while ($row = $allTypesStmt->fetch(PDO::FETCH_ASSOC)) {
+            $typeIdByName[strtolower($row['name'])] = (int) $row['id'];
+        }
+
+        $updateTypeStmt = $this->pdo->prepare('UPDATE entities SET entity_type_id = ? WHERE id = ?');
         $updateRiskStmt = $this->pdo->prepare('UPDATE entities SET risk_score = ? WHERE id = ?');
 
         foreach ($fullEntities as $ent) {
@@ -156,6 +164,17 @@ class AnalysisService
             $name = $ent['name'];
             $desc = $ent['description'] ?? '';
 
+            // 1. Auto-Reclassify entity if improperly categorized in database
+            $correctType = cg_determine_entity_type($name, $desc, $typeName);
+            if (strtolower($correctType) !== strtolower($typeName)) {
+                $targetTypeId = $typeIdByName[strtolower($correctType)] ?? null;
+                if ($targetTypeId) {
+                    $updateTypeStmt->execute([$targetTypeId, $eId]);
+                    $typeName = $correctType;
+                }
+            }
+
+            // 2. Risk Eligibility Enforcement
             if (!cg_is_entity_risk_eligible($typeName, $name, $desc)) {
                 $updateRiskStmt->execute([-1, $eId]);
                 continue;

@@ -140,14 +140,98 @@ function cg_user_can_access_case(int $caseId, ?array $user = null): bool
     return (bool)$stmt->fetchColumn();
 }
 
+/**
+ * Deterministically refine and validate entity classification.
+ * Ensures Vehicles, Courts, Agencies, Locations, Organizations, Weapons, Cases, etc.
+ * are NEVER classified as Person simply because of title capitalization or graph connections.
+ */
+function cg_determine_entity_type(string $name, ?string $description = '', ?string $suggestedType = null): string
+{
+    $n = trim($name);
+    $nLower = strtolower($n);
+
+    // 1. VEHICLE PATTERNS
+    if (preg_match('/\b(tata|safari|maruti|suzuki|toyota|fortuner|innova|honda|city|civic|hyundai|creta|verna|mahindra|scorpio|bolero|thar|bmw|audi|mercedes|benz|ford|chevrolet|nissan|volkswagen|skoda|car|cars|vehicle|vehicles|suv|sedan|truck|trucks|van|vans|motorcycle|motorcycles|bike|bikes|scooter|jeep|coupe|hatchback|auto|rickshaw|bus|cab|taxi)\b/i', $nLower)) {
+        return 'Vehicle';
+    }
+    if ($suggestedType === 'Vehicle' || $suggestedType === 'License Plate OCR') {
+        return 'Vehicle';
+    }
+
+    // 2. COURT PATTERNS
+    if (preg_match('/\b(high court|supreme court|sessions court|district court|magistrate court|trial court|family court|apex court|constitutional court|tribunal|jmic court)\b/i', $nLower)) {
+        return 'Court';
+    }
+
+    // 3. AGENCY PATTERNS
+    if (preg_match('/\b(delhi police|mumbai police|chandigarh police|police|crime branch|cbi|central bureau of investigation|nia|national investigation agency|interpol|special cell|cid|enforcement directorate|raw|research and analysis wing|intelligence bureau|police station|cyber cell|cyber crime unit|cyber crime police)\b/i', $nLower)) {
+        if (!preg_match('/\b(court)\b/i', $nLower)) {
+            return 'Agency';
+        }
+    }
+
+    // 4. LOCATION PATTERNS
+    if (preg_match('/\b(tamarind court|food court|courtyard)\b/i', $nLower)) {
+        return 'Location';
+    }
+    if (preg_match('/\b(chandigarh|delhi|new delhi|mumbai|purulia|kolkata|calcutta|bangalore|bengaluru|jaipur|rajasthan|punjab|haryana|west bengal|bihar|uttar pradesh|london|sofia|bulgaria|latvia|india|pakistan|united kingdom|chennai|hyderabad|ahmedabad|surat|pune)\b/i', $nLower)) {
+        if (!preg_match('/\b(police|court|cbi|high court|supreme court)\b/i', $nLower)) {
+            return 'Location';
+        }
+    }
+    if (preg_match('/\b(road|street|marg|nagar|colony|sector|village|town|city|district|state|country|airport|station|port|hotel|resort|restaurant|bar|pub|club|park|complex|building|house|plaza)\b/i', $nLower)) {
+        if (!preg_match('/\b(police|cbi|court|high court|supreme court|ltd|limited|inc|corp|industries)\b/i', $nLower)) {
+            return 'Location';
+        }
+    }
+
+    // 5. ORGANIZATION PATTERNS
+    if (preg_match('/\b(piccadilly|agro|industries|corp|corporation|ltd|limited|inc|pvt|private limited|company|syndicate|trust|foundation|bank|group|association|society|hospital|university|college|school|institute)\b/i', $nLower)) {
+        if (!preg_match('/\b(police|court|cbi|high court|supreme court)\b/i', $nLower)) {
+            return 'Organization';
+        }
+    }
+
+    // 6. WEAPON & AMMUNITION PATTERNS
+    if (preg_match('/\b(ak-47|rifle|rifles|pistol|pistols|revolver|gun|guns|firearm|firearms|cartridge|cartridges|bullet|bullets|grenade|grenades|explosive|explosives|knife|dagger|blade|ammunition|arms)\b/i', $nLower)) {
+        return (stripos($nLower, 'ammunition') !== false || stripos($nLower, 'bullet') !== false || stripos($nLower, 'cartridge') !== false) ? 'Ammunition' : 'Weapon';
+    }
+
+    // 7. CASE PATTERNS
+    if (preg_match('/\b(murder case|criminal case|case study|case overview|fir no|neutral citation|bail petition|question no|starred question)\b/i', $nLower)) {
+        return 'Case';
+    }
+
+    // 8. NON-PERSON SYSTEM TOKENS IN NAME
+    if (preg_match('/\b(case|court|police|bureau|branch|department|ministry|unit|library|council|commission|report|overview|study|citation|section|offences|record|statement|summary|filename|format|tokens|intelligence|evidence|metadata|analysis|size|video|photo|image|stream|feed|tag|ocr|gps|file|type|description|resolution|detected)\b/i', $nLower)) {
+        if (preg_match('/\b(court|police|bureau|department|ministry|branch|unit)\b/i', $nLower)) return 'Agency';
+        if (preg_match('/\b(photo|image|video|footage|ocr|gps|media|file)\b/i', $nLower)) return 'Document';
+        return 'Organization';
+    }
+
+    // 9. GENUINE PERSON NAME CHECK
+    if (preg_match('/^[A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?$/', $n)) {
+        return 'Person';
+    }
+
+    // Respect valid technical suggested types if provided
+    if (!empty($suggestedType) && in_array($suggestedType, ['Phone Number', 'Email', 'Bank Account', 'Transaction', 'Money', 'Aircraft', 'Date', 'Document', 'Legal Notice', 'Event', 'Social Media Account', 'Photo / Image', 'Video Footage', 'Face / Suspect Tag', 'License Plate OCR', 'GPS Location Tag', 'Evidence Object'], true)) {
+        return $suggestedType;
+    }
+
+    return 'Person';
+}
+
 /** Check if an entity is eligible for a numerical risk score (Person Accused/Suspect/Involved only) */
 function cg_is_entity_risk_eligible(string $typeName, string $name = '', ?string $description = ''): bool
 {
-    $typeClean = trim(strtolower($typeName));
-    if ($typeClean !== 'person') {
+    // Verify true semantic type
+    $actualType = cg_determine_entity_type($name, $description, $typeName);
+    if ($actualType !== 'Person') {
         return false;
     }
 
+    // Non-person risk score prevention double-check
     $text = strtolower($name . ' ' . ($description ?? ''));
     if (preg_match('/\b(victim|deceased|witness|eyewitness|judge|justice|advocate|lawyer|counsel|prosecutor|investigator|officer)\b/i', $text)) {
         if (!preg_match('/\b(accused|suspect|prime suspect|involved|co-accused|conspirator|mastermind)\b/i', $text)) {
@@ -161,7 +245,7 @@ function cg_is_entity_risk_eligible(string $typeName, string $name = '', ?string
 /** Get formatted risk score, level, and badge CSS class */
 function cg_calculate_risk_level($riskScore, string $typeName = 'Person', string $name = '', ?string $description = ''): array
 {
-    $isEligible = cg_is_entity_risk_eligible($typeName, $name, $description) && $riskScore !== null && $riskScore !== '';
+    $isEligible = cg_is_entity_risk_eligible($typeName, $name, $description) && $riskScore !== null && $riskScore !== '' && ((int)$riskScore >= 0);
 
     if (!$isEligible) {
         return [

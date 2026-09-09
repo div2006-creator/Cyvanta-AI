@@ -148,6 +148,8 @@
     'Person': '#38bdf8',
     'Organization': '#a78bfa',
     'Agency': '#818cf8',
+    'Court': '#8b5cf6',
+    'Case': '#ec4899',
     'Location': '#34d399',
     'Weapon': '#ef4444',
     'Ammunition': '#dc2626',
@@ -547,10 +549,15 @@
       if (['MP4','AVI','MOV','MKV','WEBM'].includes(type)) return '<i class="fa-solid fa-file-video me-1 text-warning"></i>';
       return '<i class="fa-solid fa-file-lines me-1"></i>';
     };
+
+    const currentUser = (window.CG && window.CG.user) || {};
+    const isSuperAdmin = ['super_admin','administrator'].includes(currentUser.role);
+
     list.innerHTML = data.data.items.map(d => {
       const type = (d.doc_type || '').toUpperCase();
       const isVideo = ['MP4','AVI','MOV','MKV','WEBM'].includes(type);
       const isImage = ['JPG','JPEG','PNG','WEBP','TIFF','BMP'].includes(type);
+      const canDelete = isSuperAdmin || (parseInt(currentUser.id, 10) === parseInt(d.uploaded_by, 10));
 
       return `
       <div class="cg-card mb-3 p-3">
@@ -565,6 +572,7 @@
             ${d.status === 'Uploaded' || d.status === 'Failed'
               ? `<button class="cg-btn cg-btn-primary cg-btn-sm" onclick="window.cgProcessDocument(${d.id})"><i class="fa-solid fa-gears"></i> Process</button>`
               : ''}
+            ${canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="window.cgDeleteDocument(${d.id})" title="${isSuperAdmin ? 'Delete Document (Super Admin Access)' : 'Delete My Uploaded Document'}"><i class="fa-solid fa-trash-can me-1"></i> Delete</button>` : ''}
           </div>
         </div>
         ${(isVideo || isImage) ? `
@@ -582,6 +590,24 @@
       </div>`;
     }).join('');
   }
+
+  window.cgDeleteDocument = async function (documentId) {
+    if (!confirm('Are you sure you want to delete this document? This will also remove extracted intelligence and update network analysis.')) return;
+    try {
+      const res = await cgApi('/api/documents/delete.php', { method: 'POST', body: JSON.stringify({ document_id: documentId }) });
+      if (res.success) {
+        cgToast(res.message || 'Document deleted successfully.', 'success');
+        loaded.documents = false; loaded.network = false; loaded.entities = false; loaded.overview = false;
+        await loadDocuments(); loadSnapshot();
+        if (document.querySelector('.cg-tab.active')?.dataset.tab === 'network') loadGraph();
+        if (document.querySelector('.cg-tab.active')?.dataset.tab === 'entities') loadEntities();
+      } else {
+        cgToast(res.message || 'Unable to delete document.', 'error');
+      }
+    } catch (e) {
+      cgToast('Unable to delete document.', 'error');
+    }
+  };
 
   window.cgProcessDocument = async function (documentId) {
     const modalEl=document.getElementById('cgProcessModal'), modal=bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -640,16 +666,43 @@
     const empty = document.getElementById('cgEvidenceEmpty');
     if (!data.success || !data.data.items.length) { list.innerHTML = ''; empty.hidden = false; return; }
     empty.hidden = true;
-    list.innerHTML = data.data.items.map(ev => `
-      <div class="cg-card mb-2">
-        <div class="d-flex justify-content-between">
+
+    const currentUser = (window.CG && window.CG.user) || {};
+    const isSuperAdmin = ['super_admin','administrator'].includes(currentUser.role);
+
+    list.innerHTML = data.data.items.map(ev => {
+      const canDelete = isSuperAdmin || (parseInt(currentUser.id, 10) === parseInt(ev.uploaded_by, 10));
+
+      return `
+      <div class="cg-card mb-2 p-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
           <div class="fw-700 text-white">${ev.evidence_type}</div>
-          <span class="cg-badge-status status-new">${ev.status}</span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="cg-badge-status status-new">${ev.status}</span>
+            ${canDelete ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="window.cgDeleteEvidence(${ev.id})" title="${isSuperAdmin ? 'Delete Evidence (Super Admin Access)' : 'Delete My Uploaded Evidence'}"><i class="fa-solid fa-trash-can me-1"></i> Delete</button>` : ''}
+          </div>
         </div>
         <div class="small text-muted mb-1">${ev.description || ''}</div>
         <div class="small text-muted">Source: ${ev.source || '—'} · Collected: ${ev.collected_date || '—'} · By ${ev.uploaded_by_name || '—'}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
+
+  window.cgDeleteEvidence = async function (evidenceId) {
+    if (!confirm('Are you sure you want to delete this evidence item?')) return;
+    try {
+      const res = await cgApi('/api/evidence/delete.php', { method: 'POST', body: JSON.stringify({ evidence_id: evidenceId }) });
+      if (res.success) {
+        cgToast(res.message || 'Evidence deleted successfully.', 'success');
+        loaded.evidence = false; loaded.overview = false;
+        await loadEvidence(); loadSnapshot();
+      } else {
+        cgToast(res.message || 'Unable to delete evidence item.', 'error');
+      }
+    } catch (e) {
+      cgToast('Unable to delete evidence item.', 'error');
+    }
+  };
   const evidenceForm = document.getElementById('cgEvidenceForm');
   if (evidenceForm) {
     evidenceForm.addEventListener('submit', async (e) => {

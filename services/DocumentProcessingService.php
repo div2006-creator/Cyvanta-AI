@@ -28,38 +28,61 @@ class DocumentProcessingService
             throw new RuntimeException('Document not found.');
         }
 
-        $this->updateStage($documentId, 'TEXT_EXTRACTION', 'in_progress');
         $this->setDocStatus($documentId, 'Processing');
-        $text = $this->extractText($document);
-        $this->updateStage($documentId, 'TEXT_EXTRACTION', 'completed', strlen($text) . ' characters extracted');
 
-        $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'in_progress');
-        if (AI_SERVICE_ENABLED && AI_SERVICE_URL) {
-            $result = $this->callExternalAiService($text);
-        } else {
-            $result = $this->runDeterministicExtraction($text);
+        try {
+            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'in_progress');
+            $text = $this->extractText($document);
+            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'completed', strlen($text) . ' characters extracted');
+        } catch (Throwable $e) {
+            $this->updateStage($documentId, 'TEXT_EXTRACTION', 'failed', $e->getMessage());
+            $this->setDocStatus($documentId, 'Failed');
+            throw $e;
         }
-        $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'completed', count($result['entities']) . ' entities found (' . count($result['rejected_entities'] ?? []) . ' rejected)');
 
-        $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'in_progress');
-        $entityIdMap = $this->persistEntities($document, $result['entities']);
-        $relCount = $this->persistRelationships($document, $entityIdMap, $result['relationships']);
-        $this->persistRejectedEntities($document, $result['rejected_entities'] ?? []);
-        $this->persistTimelineEvents($document, $result['timeline'] ?? []);
-
-        $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'completed', "$relCount relationships found");
-        if (count($result['entities']) > 0) {
-            $this->recordCaseEvent((int)$document['case_id'], 'ENTITIES_EXTRACTED', count($result['entities']) . ' validated entities extracted from ' . $document['name'] . '.');
+        try {
+            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'in_progress');
+            if (AI_SERVICE_ENABLED && AI_SERVICE_URL) {
+                $result = $this->callExternalAiService($text);
+            } else {
+                $result = $this->runDeterministicExtraction($text);
+            }
+            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'completed', count($result['entities']) . ' entities found (' . count($result['rejected_entities'] ?? []) . ' rejected)');
+        } catch (Throwable $e) {
+            $this->updateStage($documentId, 'ENTITY_EXTRACTION', 'failed', $e->getMessage());
+            $this->setDocStatus($documentId, 'Failed');
+            throw $e;
         }
-        if ($relCount > 0) {
-            $this->recordCaseEvent((int)$document['case_id'], 'RELATIONSHIPS_DISCOVERED', $relCount . ' evidence-backed relationships discovered from ' . $document['name'] . '.');
+
+        try {
+            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'in_progress');
+            $entityIdMap = $this->persistEntities($document, $result['entities']);
+            $relCount = $this->persistRelationships($document, $entityIdMap, $result['relationships']);
+            $this->persistRejectedEntities($document, $result['rejected_entities'] ?? []);
+            $this->persistTimelineEvents($document, $result['timeline'] ?? []);
+
+            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'completed', "$relCount relationships found");
+            if (count($result['entities']) > 0) {
+                $this->recordCaseEvent((int)$document['case_id'], 'ENTITIES_EXTRACTED', count($result['entities']) . ' validated entities extracted from ' . $document['name'] . '.');
+            }
+            if ($relCount > 0) {
+                $this->recordCaseEvent((int)$document['case_id'], 'RELATIONSHIPS_DISCOVERED', $relCount . ' evidence-backed relationships discovered from ' . $document['name'] . '.');
+            }
+        } catch (Throwable $e) {
+            $this->updateStage($documentId, 'RELATIONSHIP_EXTRACTION', 'failed', $e->getMessage());
+            $this->setDocStatus($documentId, 'Failed');
+            throw $e;
         }
 
         $this->updateStage($documentId, 'NETWORK_UPDATE', 'completed', 'Graph updated.');
 
-        $this->updateStage($documentId, 'AI_ANALYSIS', 'in_progress');
-        $analysisId = $this->recordAnalysis($document, count($result['entities']), $relCount);
-        $this->updateStage($documentId, 'AI_ANALYSIS', 'completed', 'Baseline indicators computed.');
+        try {
+            $this->updateStage($documentId, 'AI_ANALYSIS', 'in_progress');
+            $analysisId = $this->recordAnalysis($document, count($result['entities']), $relCount);
+            $this->updateStage($documentId, 'AI_ANALYSIS', 'completed', 'Baseline indicators computed.');
+        } catch (Throwable $e) {
+            $this->updateStage($documentId, 'AI_ANALYSIS', 'failed', $e->getMessage());
+        }
 
         $this->setDocStatus($documentId, 'Processed');
 
@@ -67,7 +90,7 @@ class DocumentProcessingService
             'entities_found' => count($result['entities']),
             'entities_rejected' => count($result['rejected_entities'] ?? []),
             'relationships_found' => $relCount,
-            'analysis_id' => $analysisId,
+            'analysis_id' => $analysisId ?? 0,
         ];
     }
 
@@ -75,25 +98,55 @@ class DocumentProcessingService
     {
         $path = UPLOAD_DIR . '/' . $document['stored_filename'];
         if (!is_file($path) || !is_readable($path)) {
-            throw new RuntimeException('Uploaded document is not readable.');
+            $altPath = APP_ROOT . '/storage/uploads/' . $document['stored_filename'];
+            if (is_file($altPath) && is_readable($altPath)) {
+                $path = $altPath;
+            } else {
+                throw new RuntimeException('Uploaded document file (' . $document['stored_filename'] . ') is unreadable or missing on the server.');
+            }
         }
 
-        $ext = strtolower(pathinfo($document['original_filename'], PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'bmp'], true)) {
-            return $this->extractImageIntelligence($document, $path, $ext);
+        // Robust multi-tier extension resolution
+        $ext = strtolower(pathinfo($document['original_filename'] ?? '', PATHINFO_EXTENSION));
+        if (empty($ext)) {
+            $ext = strtolower(pathinfo($document['stored_filename'] ?? '', PATHINFO_EXTENSION));
+        }
+        if (empty($ext) && !empty($document['doc_type'])) {
+            $ext = strtolower(trim($document['doc_type']));
         }
 
-        if (in_array($ext, ['mp4', 'avi', 'mov', 'mkv', 'webm'], true)) {
-            return $this->extractVideoIntelligence($document, $path, $ext);
+        // MIME-type inspection fallback
+        $mime = '';
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $m = @finfo_file($finfo, $path);
+                if ($m) $mime = strtolower($m);
+                @finfo_close($finfo);
+            }
         }
 
-        if (in_array($ext, ['txt', 'csv'], true)) {
-            $text = (string)file_get_contents($path);
-            if (trim($text) === '') throw new RuntimeException('The document contains no readable text.');
+        // Image intelligence (JPG, JPEG, PNG, WEBP, TIFF, BMP, GIF, etc.)
+        $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'bmp', 'gif', 'heic'];
+        if (in_array($ext, $imageExts, true) || str_starts_with($mime, 'image/')) {
+            return $this->extractImageIntelligence($document, $path, $ext ?: 'png');
+        }
+
+        // Video intelligence (MP4, AVI, MOV, MKV, WEBM, etc.)
+        $videoExts = ['mp4', 'avi', 'mov', 'mkv', 'webm', '3gp', 'm4v'];
+        if (in_array($ext, $videoExts, true) || str_starts_with($mime, 'video/')) {
+            return $this->extractVideoIntelligence($document, $path, $ext ?: 'mp4');
+        }
+
+        if (in_array($ext, ['txt', 'csv', 'log', 'json', 'xml', 'md'], true) || str_starts_with($mime, 'text/')) {
+            $text = @file_get_contents($path);
+            if ($text === false || trim($text) === '') {
+                return "CASE DOCUMENT INTELLIGENCE: " . ($document['name'] ?? 'Text Document') . "\nFilename: " . ($document['original_filename'] ?? 'document.txt') . "\nText file uploaded without plain text body.";
+            }
             return $text;
         }
 
-        if ($ext === 'docx') {
+        if ($ext === 'docx' || $mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             if (!class_exists('ZipArchive')) throw new RuntimeException('DOCX extraction is unavailable on this server.');
             $zip = new ZipArchive();
             if ($zip->open($path) !== true) throw new RuntimeException('Unable to read the DOCX document.');
@@ -108,11 +161,12 @@ class DocumentProcessingService
             return trim($text);
         }
 
-        if ($ext === 'pdf') {
+        if ($ext === 'pdf' || $mime === 'application/pdf') {
             return $this->extractPdfIntelligence($document, $path);
         }
 
-        throw new RuntimeException('Supported processing formats are TXT, CSV, DOCX, PDF, Photos (JPG, PNG, WEBP) and Videos (MP4, AVI, MOV).');
+        // Final resilient fallback: treat unknown binary files as Media Intelligence items instead of hard failing
+        return $this->extractImageIntelligence($document, $path, $ext ?: 'bin');
     }
 
     private function extractPdfIntelligence(array $document, string $path): string
@@ -374,6 +428,11 @@ class DocumentProcessingService
             'weapons', 'arms', 'ammunition', 'grenades', 'rocket launchers'
         ];
 
+        $vehiclesList = [
+            'Tata Safari', 'Black Tata Safari', 'Maruti 800', 'Toyota Fortuner', 'Innova',
+            'Hyundai Creta', 'Honda City', 'Scorpio', 'Bolero', 'Thar', 'BMW', 'Audi', 'Mercedes'
+        ];
+
         $aircraftList = [
             'An-26', 'An-26 aircraft', 'Anton-26', 'arms drop aircraft', 'cargo plane'
         ];
@@ -392,29 +451,35 @@ class DocumentProcessingService
         ];
 
         // 1. GAZETTEER MATCHING (High Confidence)
+        foreach ($vehiclesList as $veh) {
+            if (preg_match('/\b' . preg_quote($veh, '/') . '\b/i', $cleanText)) {
+                $rawCandidates[] = ['name' => $veh, 'type' => 'Vehicle', 'risk' => -1, 'confidence' => 95];
+            }
+        }
+
         foreach ($locationsList as $loc) {
             if (preg_match('/\b' . preg_quote($loc, '/') . '\b/i', $cleanText)) {
-                $rawCandidates[] = ['name' => $loc, 'type' => 'Location', 'risk' => 15, 'confidence' => 95];
+                $rawCandidates[] = ['name' => $loc, 'type' => 'Location', 'risk' => -1, 'confidence' => 95];
             }
         }
 
         foreach ($agenciesList as $agency) {
             if (preg_match('/\b' . preg_quote($agency, '/') . '\b/i', $cleanText)) {
-                $type = in_array($agency, ['CBI', 'Central Bureau of Investigation', 'Interpol', 'National Investigation Agency', 'NIA', 'Research and Analysis Wing'], true) ? 'Agency' : 'Organization';
-                $rawCandidates[] = ['name' => $agency, 'type' => $type, 'risk' => 25, 'confidence' => 95];
+                $type = (stripos($agency, 'court') !== false) ? 'Court' : (in_array($agency, ['CBI', 'Central Bureau of Investigation', 'Interpol', 'National Investigation Agency', 'NIA', 'Research and Analysis Wing', 'Chandigarh Police', 'Mumbai Crime Branch'], true) ? 'Agency' : 'Organization');
+                $rawCandidates[] = ['name' => $agency, 'type' => $type, 'risk' => -1, 'confidence' => 95];
             }
         }
 
         foreach ($weaponsList as $wep) {
             if (preg_match('/\b' . preg_quote($wep, '/') . '\b/i', $cleanText)) {
                 $type = (stripos($wep, 'ammunition') !== false) ? 'Ammunition' : 'Weapon';
-                $rawCandidates[] = ['name' => $wep, 'type' => $type, 'risk' => 85, 'confidence' => 95];
+                $rawCandidates[] = ['name' => $wep, 'type' => $type, 'risk' => -1, 'confidence' => 95];
             }
         }
 
         foreach ($aircraftList as $air) {
             if (preg_match('/\b' . preg_quote($air, '/') . '\b/i', $cleanText)) {
-                $rawCandidates[] = ['name' => $air, 'type' => 'Aircraft', 'risk' => 75, 'confidence' => 95];
+                $rawCandidates[] = ['name' => $air, 'type' => 'Aircraft', 'risk' => -1, 'confidence' => 95];
             }
         }
 
@@ -437,15 +502,14 @@ class DocumentProcessingService
             foreach ($m as $match) {
                 $phone = trim(preg_replace('/^(?:phone|mobile|contact|tel|telephone|call|ph)[:\s]+/i', '', $match[0]));
                 if (strlen(preg_replace('/\D/', '', $phone)) >= 7) {
-                    $rawCandidates[] = ['name' => $phone, 'type' => 'Phone Number', 'risk' => 50, 'confidence' => 90];
+                    $rawCandidates[] = ['name' => $phone, 'type' => 'Phone Number', 'risk' => -1, 'confidence' => 90];
                 }
             }
         }
         if (preg_match_all('/\b(?:\+91[-\s]?)?[6-9]\d{9}\b/', $cleanText, $m)) {
             foreach (array_unique($m[0]) as $phone) {
-                // Ensure number is NOT inside a question number or URL or FIR number
                 if (!preg_match('/(?:question|fir|no|code|doc|page|citation|id)[^\w\n]*' . preg_quote($phone, '/') . '/i', $cleanText)) {
-                    $rawCandidates[] = ['name' => trim($phone), 'type' => 'Phone Number', 'risk' => 50, 'confidence' => 88];
+                    $rawCandidates[] = ['name' => trim($phone), 'type' => 'Phone Number', 'risk' => -1, 'confidence' => 88];
                 } else {
                     $rejectedEntities[] = [
                         'candidate' => $phone,
@@ -474,57 +538,42 @@ class DocumentProcessingService
         // Email Addresses
         if (preg_match_all('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $cleanText, $m)) {
             foreach (array_unique($m[0]) as $email) {
-                $rawCandidates[] = ['name' => strtolower(trim($email)), 'type' => 'Email', 'risk' => 30, 'confidence' => 95];
+                $rawCandidates[] = ['name' => strtolower(trim($email)), 'type' => 'Email', 'risk' => -1, 'confidence' => 95];
             }
         }
 
         // Bank Accounts (must have ACC / ACCOUNT keyword)
         if (preg_match_all('/\b(?:ACC|ACCOUNT|A\/C|IBAN)[-\s#:]*([A-Z0-9]*\d[A-Z0-9-]{4,19})\b/i', $cleanText, $m)) {
             foreach (array_unique($m[1]) as $acct) {
-                $rawCandidates[] = ['name' => 'ACC-' . strtoupper(trim($acct)), 'type' => 'Bank Account', 'risk' => 60, 'confidence' => 90];
+                $rawCandidates[] = ['name' => 'ACC-' . strtoupper(trim($acct)), 'type' => 'Bank Account', 'risk' => -1, 'confidence' => 90];
             }
         }
 
         // Case / FIR Numbers
         if (preg_match_all('/\b(?:FIR\s+No\.?|Case\s+No\.?|Neutral\s+Citation)[:\s]*([A-Z0-9\/\.\:-]+)\b/i', $cleanText, $m)) {
             foreach (array_unique($m[0]) as $cNum) {
-                $rawCandidates[] = ['name' => trim($cNum), 'type' => 'Case Number', 'risk' => 20, 'confidence' => 95];
+                $rawCandidates[] = ['name' => trim($cNum), 'type' => 'Case Number', 'risk' => -1, 'confidence' => 95];
             }
         }
 
-        // Person Names: Capitalized 2-3 word sequences (Strict Validation Pipeline)
+        // Person / Entity Name Candidate Parsing with Semantic Classification Engine
         if (preg_match_all('/\b([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/', $cleanText, $m)) {
             foreach (array_unique($m[1]) as $nameCandidate) {
                 $nameCandidate = trim($nameCandidate);
+                $determinedType = cg_determine_entity_type($nameCandidate);
 
-                // NEGATIVE RULES FOR PERSON CLASSIFICATION
-                if (in_array($nameCandidate, $locationsList, true) || preg_match('/\b(?:Bengal|Pradesh|Purulia|Bihar|Delhi|Mumbai|Chandigarh|Rajasthan|Punjab|Haryana|Bulgaria|Latvia|India|Pakistan|United Kingdom)\b/i', $nameCandidate)) {
-                    $rejectedEntities[] = [
-                        'candidate' => $nameCandidate,
-                        'predicted_type' => 'Person',
-                        'reason' => 'Geographic location cannot be classified as PERSON (Section 1 rule compliance).',
-                        'source_text' => 'Geography check: ' . $nameCandidate
-                    ];
-                    continue;
-                }
-
-                if (in_array($nameCandidate, $agenciesList, true) || preg_match('/\b(?:Sabha|Bureau|Affairs|Court|Police|Station|Branch|Department|Ministry|Unit|Library|Council|Commission)\b/i', $nameCandidate)) {
-                    $rejectedEntities[] = [
-                        'candidate' => $nameCandidate,
-                        'predicted_type' => 'Person',
-                        'reason' => 'Government agency/organization heading cannot be classified as PERSON (Section 1 rule compliance).',
-                        'source_text' => 'Agency check: ' . $nameCandidate
-                    ];
-                    continue;
-                }
-
-                if (in_array($nameCandidate, $documentsAndNotices, true) || preg_match('/\b(?:Question|Notices|Report|Overview|Study|Citation|Section|Offences|Record|Statement|Summary|Filename|Format|Tokens|Intelligence|Evidence|Metadata|Analysis|Size)\b/i', $nameCandidate)) {
-                    $rejectedEntities[] = [
-                        'candidate' => $nameCandidate,
-                        'predicted_type' => 'Person',
-                        'reason' => 'Parliamentary document heading or system metadata term cannot be classified as PERSON.',
-                        'source_text' => 'Document heading check: ' . $nameCandidate
-                    ];
+                if ($determinedType !== 'Person') {
+                    // Re-route to true semantic type candidate if non-person
+                    if (!in_array($determinedType, ['Document', 'Organization'], true) || preg_match('/\b(tata|safari|maruti|toyota|honda|court|police|cbi|hospital|bank)\b/i', $nameCandidate)) {
+                        $rawCandidates[] = ['name' => $nameCandidate, 'type' => $determinedType, 'risk' => -1, 'confidence' => 90];
+                    } else {
+                        $rejectedEntities[] = [
+                            'candidate' => $nameCandidate,
+                            'predicted_type' => 'Person',
+                            'reason' => "Non-person token reclassified as $determinedType and excluded from Person list.",
+                            'source_text' => 'Semantic check: ' . $nameCandidate
+                        ];
+                    }
                     continue;
                 }
 
@@ -539,7 +588,7 @@ class DocumentProcessingService
                     continue;
                 }
 
-                // Passed all negative checks -> Valid Person
+                // Valid Person candidate
                 $rawCandidates[] = ['name' => $nameCandidate, 'type' => 'Person', 'risk' => 40, 'confidence' => 85];
             }
         }
@@ -726,10 +775,10 @@ class DocumentProcessingService
         );
 
         foreach ($entities as $e) {
-            $typeStmt->execute([$e['type']]);
+            $determinedType = cg_determine_entity_type($e['name'], '', $e['type'] ?? 'Person');
+            $typeStmt->execute([$determinedType]);
             $typeId = $typeStmt->fetchColumn();
             if (!$typeId) {
-                // Fallback to Person or Organization
                 $typeStmt->execute(['Person']);
                 $typeId = $typeStmt->fetchColumn() ?: 1;
             }
@@ -738,11 +787,15 @@ class DocumentProcessingService
             $existingId = $findStmt->fetchColumn();
             if ($existingId) {
                 $map[$e['name']] = (int) $existingId;
+                $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
+                $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
+                $this->pdo->prepare('UPDATE entities SET entity_type_id = ?, risk_score = ? WHERE id = ?')
+                          ->execute([$typeId, $riskToSave, $existingId]);
                 continue;
             }
 
             $aliases = $e['possible_aliases'] ?? null;
-            $isEligible = cg_is_entity_risk_eligible($e['type'] ?? 'Person', $e['name'], '');
+            $isEligible = cg_is_entity_risk_eligible($determinedType, $e['name'], '');
             $riskToSave = $isEligible ? ($e['risk'] ?? 20) : -1;
             $insertStmt->execute([
                 $document['case_id'], $typeId, $e['name'],

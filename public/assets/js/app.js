@@ -17,10 +17,16 @@
 
   window.cgFormatRisk = function (riskScore, typeName, name, description) {
     const typeClean = (typeName || '').trim().toLowerCase();
-    let isEligible = typeClean === 'person' && riskScore !== null && riskScore !== undefined && riskScore !== '';
+    const nameClean = (name || '').trim().toLowerCase();
+
+    // Front-end vehicle, court, agency, location safety check
+    const isVehicle = /\b(tata|safari|maruti|suzuki|toyota|fortuner|innova|honda|city|civic|hyundai|creta|verna|mahindra|scorpio|bolero|thar|bmw|audi|mercedes|benz|ford|chevrolet|nissan|car|cars|vehicle|vehicles|suv|sedan|truck|trucks|van|vans|motorcycle|motorcycles|bike|bikes|jeep)\b/i.test(nameClean);
+    const isCourtOrAgency = /\b(court|police|cbi|investigation agency|interpol|crime branch|special cell|tribunal)\b/i.test(nameClean) && !/\b(tamarind court)\b/i.test(nameClean);
+
+    let isEligible = (typeClean === 'person') && !isVehicle && !isCourtOrAgency && riskScore !== null && riskScore !== undefined && riskScore !== '' && (parseInt(riskScore, 10) >= 0);
 
     if (isEligible) {
-      const text = ((name || '') + ' ' + (description || '')).toLowerCase();
+      const text = (nameClean + ' ' + (description || '')).toLowerCase();
       if (text.match(/\b(victim|deceased|witness|eyewitness|judge|justice|advocate|lawyer|counsel|prosecutor|investigator|officer)\b/i)) {
         if (!text.match(/\b(accused|suspect|prime suspect|involved|co-accused|conspirator|mastermind)\b/i)) {
           isEligible = false;

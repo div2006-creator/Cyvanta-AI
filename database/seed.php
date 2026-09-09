@@ -74,7 +74,8 @@ $entityTypes = [
     ['Video Footage', 'fa-film', '#e879f9'],
     ['Face / Suspect Tag', 'fa-user-gear', '#ef4444'],
     ['License Plate OCR', 'fa-id-card', '#f59e0b'],
-    ['GPS Location Tag', 'fa-location-crosshairs', '#10b981'],
+    ['Court', 'fa-gavel', '#8b5cf6'],
+    ['Case', 'fa-folder-open', '#ec4899'],
     ['Evidence Object', 'fa-shield-halved', '#6366f1'],
 ];
 $stmt = $isSqlite

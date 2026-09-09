@@ -487,9 +487,10 @@ class IntelligenceService
             $eName = trim($ent['name'] ?? '');
             if ($eName === '') continue;
 
-            $eType = strtolower(trim($ent['type'] ?? 'person'));
+            $detType = cg_determine_entity_type($eName, '', $ent['type'] ?? 'person');
+            $eType = strtolower($detType);
             $typeId = $typeMap[$eType] ?? $defaultTypeId;
-            $isEligible = cg_is_entity_risk_eligible($ent['type'] ?? 'Person', $eName, '');
+            $isEligible = cg_is_entity_risk_eligible($detType, $eName, '');
             $riskToSave = $isEligible ? max(10, min(99, (int) ($ent['risk'] ?? 75))) : -1;
 
             // Find existing entity or insert
@@ -500,9 +501,9 @@ class IntelligenceService
             if ($existingId) {
                 $entityIdMap[$eName] = (int) $existingId;
                 if ($isEligible) {
-                    $this->pdo->prepare("UPDATE entities SET risk_score = MAX(COALESCE(risk_score, 0), ?), updated_at = NOW() WHERE id = ?")->execute([$riskToSave, $existingId]);
+                    $this->pdo->prepare("UPDATE entities SET entity_type_id = ?, risk_score = MAX(COALESCE(risk_score, 0), ?), updated_at = NOW() WHERE id = ?")->execute([$typeId, $riskToSave, $existingId]);
                 } else {
-                    $this->pdo->prepare("UPDATE entities SET risk_score = -1, updated_at = NOW() WHERE id = ?")->execute([$existingId]);
+                    $this->pdo->prepare("UPDATE entities SET entity_type_id = ?, risk_score = -1, updated_at = NOW() WHERE id = ?")->execute([$typeId, $existingId]);
                 }
             } else {
                 $insE = $this->pdo->prepare("
