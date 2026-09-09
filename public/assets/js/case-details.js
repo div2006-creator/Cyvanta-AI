@@ -52,6 +52,8 @@
       setTimeout(() => { try { window.cgGraphInstance.fit(); } catch (e) {} }, 80);
     }
   }
+  window.activateTab = activateTab;
+  window.cgActivateTab = activateTab;
 
   document.addEventListener('click', function (e) {
     const tabEl = e.target.closest('.cg-tab');
@@ -1017,7 +1019,7 @@
               <div class="fw-700 text-dark small mb-1"><i class="fa-solid fa-shield-halved text-success me-1"></i> ${rData.evidence.length} Evidence Items Cataloged & Verified</div>
               <div class="small text-secondary">All document evidence items, original collection dates, OCR findings, and timeline artifacts are securely cataloged in the Evidence section.</div>
             </div>
-            <button class="cg-btn cg-btn-primary cg-btn-sm no-print" onclick="activateTab('evidence')">
+            <button class="cg-btn cg-btn-primary cg-btn-sm no-print" onclick="window.activateTab('evidence')">
               <i class="fa-solid fa-folder-open me-1"></i> Inspect Evidence Repository (${rData.evidence.length})
             </button>
           </div>
